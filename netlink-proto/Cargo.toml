@@ -1,0 +1,45 @@
+[package]
+authors = ["Corentin Henry <corentinhenry@gmail.com>"]
+name = "netlink-proto"
+version = "0.0.1"
+
+homepage = "https://github.com/little-dude/netlink"
+keywords = ["netlink", "linux"]
+license = "MIT"
+readme = "../README.md"
+repository = "https://github.com/little-dude/netlink"
+description = "netlink packet types"
+
+[dependencies]
+bytes = "*"
+failure = "*"
+failure_derive = "*"
+lazy_static = "*"
+log = "0.4.3"
+futures = "0.1.22"
+tokio-io = "0.1.7"
+tokio-reactor = "0.1.2"
+
+[dependencies.netlink-sys]
+optional = true
+default-features = false
+path = "../netlink-sys"
+version = "0.0"
+
+[dependencies.netlink-packet]
+optional = true
+default-features = false
+path = "../netlink-packet"
+version = "0.0"
+
+[dev-dependencies]
+env_logger = "0.5.10"
+
+[features]
+rtnetlink = [
+    "netlink-packet", "netlink-packet/rtnetlink",
+    "netlink-sys", "netlink-sys/tokio_support"]
+
+audit = [
+    "netlink-packet", "netlink-packet/audit",
+    "netlink-sys", "netlink-sys/tokio_support"]

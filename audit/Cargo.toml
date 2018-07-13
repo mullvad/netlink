@@ -1,14 +1,14 @@
 [package]
-name = "rtnetlink"
+name = "audit"
 version = "0.0.2"
 authors = ["Corentin Henry <corentinhenry@gmail.com>"]
 
 homepage = "https://github.com/little-dude/netlink"
-keywords = ["netlink", "ip", "linux"]
+keywords = ["netlink", "ip", "linux", "audit"]
 license = "MIT"
 readme = "../README.md"
 repository = "https://github.com/little-dude/netlink"
-description = "manipulate linux networking resources via netlink"
+description = "linux audit via netlink"
 
 [dependencies]
 bytes = "0.4.8"
@@ -23,13 +23,13 @@ failure_derive = "0.1.1"
 [dependencies.netlink-packet]
 version = "0.0"
 default-features = false
-features = ["rtnetlink"]
+features = ["audit"]
 path = "../netlink-packet"
 
 [dependencies.netlink-proto]
 version = "0.0"
 default-features = false
-features = ["rtnetlink"]
+features = ["audit"]
 path = "../netlink-proto"
 
 [dev-dependencies]
