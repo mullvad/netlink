@@ -1,9 +1,8 @@
 use byteorder::{ByteOrder, NativeEndian};
+use failure::ResultExt;
 
 use constants::*;
-use {
-    Field, NetlinkPacketError, Parseable, Result, RuleField, RuleFieldFlags, RuleMask, RuleMessage,
-};
+use {DecodeError, Field, Parseable, RuleField, RuleFieldFlags, RuleMask, RuleMessage};
 
 // FIXME: when const fn are stable, use them, instead of defining a macro
 // const fn u32_array(start: usize, len: usize) -> Field {
@@ -41,16 +40,26 @@ impl<T: AsRef<[u8]>> RuleBuffer<T> {
         RuleBuffer { buffer }
     }
 
-    pub fn new_checked(buffer: T) -> Result<Self> {
+    pub fn new_checked(buffer: T) -> Result<Self, DecodeError> {
         let packet = Self::new(buffer);
         packet.check_len()?;
         Ok(packet)
     }
 
-    pub(crate) fn check_len(&self) -> Result<()> {
+    pub(crate) fn check_len(&self) -> Result<(), DecodeError> {
         let len = self.buffer.as_ref().len();
-        if len < BUFLEN.end || len < BUFLEN.end + self.buflen() as usize {
-            Err(NetlinkPacketError::Decode)
+        if len < BUFLEN.end {
+            Err(format!(
+                "buffer size is {}, whereas a rule buffer is at least {} long",
+                len, BUFLEN.end
+            ).into())
+        } else if len < BUFLEN.end + self.buflen() as usize {
+            Err(format!(
+                "buffer length is {}, but it should be {} (header) + {} (length field)",
+                len,
+                BUFLEN.end,
+                self.buflen()
+            ).into())
         } else {
             Ok(())
         }
@@ -154,10 +163,10 @@ impl<T: AsRef<[u8]> + AsMut<[u8]>> RuleBuffer<T> {
 }
 
 impl<'a, T: AsRef<[u8]> + ?Sized> Parseable<RuleMessage> for RuleBuffer<&'a T> {
-    fn parse(&self) -> Result<RuleMessage> {
+    fn parse(&self) -> Result<RuleMessage, DecodeError> {
         use self::RuleField::*;
 
-        self.check_len()?;
+        self.check_len().context("invalid rule message buffer")?;
         let mut rule = RuleMessage::new();
         rule.flags = self.flags().into();
         rule.action = self.action().into();
@@ -220,7 +229,10 @@ impl<'a, T: AsRef<[u8]> + ?Sized> Parseable<RuleMessage> for RuleBuffer<&'a T> {
                     // For all the other fields, the value is a string
                     let str_end = offset + value as usize;
                     if str_end > self.buf().len() {
-                        return Err(NetlinkPacketError::Decode);
+                        return Err(format!(
+                            "failed to decode field. type={} (value should be a string?)",
+                            field
+                        ).into());
                     }
                     let s: String = String::from_utf8_lossy(&self.buf()[offset..str_end]).into();
                     offset = str_end;
@@ -237,7 +249,12 @@ impl<'a, T: AsRef<[u8]> + ?Sized> Parseable<RuleMessage> for RuleBuffer<&'a T> {
                         AUDIT_OBJ_TYPE => ObjType(s),
                         AUDIT_OBJ_LEV_LOW => ObjLevLow(s),
                         AUDIT_OBJ_LEV_HIGH => ObjLevHigh(s),
-                        _ => return Err(NetlinkPacketError::Decode),
+                        _ => {
+                            return Err(format!(
+                                "failed to decode field (unknown type) type={}, value={}",
+                                field, s
+                            ).into())
+                        }
                     }
                 }
             };

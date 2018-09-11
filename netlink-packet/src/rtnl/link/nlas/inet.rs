@@ -1,7 +1,9 @@
 use std::mem::size_of;
 
+use failure::ResultExt;
+
 use constants::*;
-use {DefaultNla, NativeNla, Nla, NlaBuffer, Parseable, Result};
+use {DecodeError, DefaultNla, NativeNla, Nla, NlaBuffer, Parseable};
 
 #[repr(C)]
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
@@ -80,13 +82,18 @@ impl Nla for LinkAfInetNla {
 }
 
 impl<'buffer, T: AsRef<[u8]> + ?Sized> Parseable<LinkAfInetNla> for NlaBuffer<&'buffer T> {
-    fn parse(&self) -> Result<LinkAfInetNla> {
+    fn parse(&self) -> Result<LinkAfInetNla, DecodeError> {
         use self::LinkAfInetNla::*;
         let payload = self.value();
         Ok(match self.kind() {
             IFLA_INET_UNSPEC => Unspec(payload.to_vec()),
-            IFLA_INET_CONF => DevConf(LinkInetDevConf::from_bytes(payload)?),
-            _ => Other(<Self as Parseable<DefaultNla>>::parse(self)?),
+            IFLA_INET_CONF => DevConf(
+                LinkInetDevConf::from_bytes(payload).context("invalid IFLA_INET_CONF value")?,
+            ),
+            kind => Other(
+                <Self as Parseable<DefaultNla>>::parse(self)
+                    .context(format!("unknown NLA type {}", kind))?,
+            ),
         })
     }
 }

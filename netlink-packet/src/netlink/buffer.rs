@@ -1,6 +1,6 @@
 use byteorder::{ByteOrder, NativeEndian};
 
-use {Field, NetlinkFlags, NetlinkPacketError, Rest, Result};
+use {DecodeError, Field, NetlinkFlags, Rest};
 
 const LENGTH: Field = 0..4;
 const MESSAGE_TYPE: Field = 4..6;
@@ -145,16 +145,31 @@ impl<T: AsRef<[u8]>> NetlinkBuffer<T> {
     /// assert!(NetlinkBuffer::new_checked(&BYTES[..]).is_err());
     /// # }
     /// ```
-    pub fn new_checked(buffer: T) -> Result<NetlinkBuffer<T>> {
+    pub fn new_checked(buffer: T) -> Result<NetlinkBuffer<T>, DecodeError> {
         let packet = Self::new(buffer);
         packet.check_buffer_length()?;
         Ok(packet)
     }
 
-    fn check_buffer_length(&self) -> Result<()> {
+    fn check_buffer_length(&self) -> Result<(), DecodeError> {
         let len = self.buffer.as_ref().len();
-        if len < PORT_NUMBER.end || len < self.length() as usize {
-            Err(NetlinkPacketError::Decode)
+        if len < PORT_NUMBER.end {
+            Err(format!(
+                "invalid netlink buffer: length is {} but netlink packets are at least {} bytes",
+                len, PORT_NUMBER.end
+            ).into())
+        } else if len < self.length() as usize {
+            Err(format!(
+                "invalid netlink buffer: length field says {} the buffer is {} bytes long",
+                self.length(),
+                len
+            ).into())
+        } else if (self.length() as usize) < PORT_NUMBER.end {
+            Err(format!(
+                "invalid netlink buffer: length field says {} but netlink packets are at least {} bytes",
+                self.length(),
+                len
+            ).into())
         } else {
             Ok(())
         }

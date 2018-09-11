@@ -1,8 +1,9 @@
 use constants::*;
+use failure::ResultExt;
 
 use {
-    AckMessage, Emitable, ErrorBuffer, ErrorMessage, NetlinkBuffer, NetlinkHeader,
-    NetlinkPacketError, Parseable, Result,
+    AckMessage, DecodeError, Emitable, EncodeError, EncodeErrorKind, ErrorBuffer, ErrorMessage,
+    NetlinkBuffer, NetlinkHeader, Parseable,
 };
 
 #[cfg(feature = "rtnetlink")]
@@ -38,7 +39,6 @@ use AuditMessage;
 pub struct NetlinkMessage {
     header: NetlinkHeader,
     payload: NetlinkPayload,
-    finalized: bool,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -131,7 +131,6 @@ impl From<NetlinkPayload> for NetlinkMessage {
         NetlinkMessage {
             header: NetlinkHeader::default(),
             payload,
-            finalized: false,
         }
     }
 }
@@ -152,11 +151,7 @@ impl From<AuditMessage> for NetlinkMessage {
 
 impl NetlinkMessage {
     pub fn new(header: NetlinkHeader, payload: NetlinkPayload) -> Self {
-        NetlinkMessage {
-            header,
-            payload,
-            finalized: false,
-        }
+        NetlinkMessage { header, payload }
     }
 
     pub fn into_parts(self) -> (NetlinkHeader, NetlinkPayload) {
@@ -183,12 +178,10 @@ impl NetlinkMessage {
     /// [`Emitable::emit()`](trait.Emitable.html#tymethod.emit), but unlike `emit()`, this method
     /// does not panic if the message is malformed or if the destination buffer is too small.
     /// Instead, an error is returned.
-    pub fn to_bytes(&mut self, buffer: &mut [u8]) -> Result<usize> {
-        if !self.finalized {
-            self.finalize();
-        }
+    pub fn to_bytes(&mut self, buffer: &mut [u8]) -> Result<usize, EncodeError> {
+        self.finalize();
         if self.header().length() as usize > buffer.len() {
-            Err(NetlinkPacketError::Encode)
+            Err(EncodeErrorKind::Exhausted.into())
         } else {
             self.emit(buffer);
             Ok(self.header().length() as usize)
@@ -196,8 +189,11 @@ impl NetlinkMessage {
     }
 
     /// Try to parse a message from a buffer
-    pub fn from_bytes(buffer: &[u8]) -> Result<Self> {
-        NetlinkBuffer::new_checked(&buffer)?.parse()
+    pub fn from_bytes(buffer: &[u8]) -> Result<Self, DecodeError> {
+        Ok(NetlinkBuffer::new_checked(&buffer)
+            .context("failed to parse netlink packet")?
+            .parse()
+            .context("failed to parse netlink packet")?)
     }
 
     /// Check if the payload is a `NLMSG_DONE` message
@@ -252,18 +248,20 @@ impl NetlinkMessage {
     pub fn finalize(&mut self) {
         *self.header.length_mut() = self.buffer_len() as u32;
         *self.header.message_type_mut() = self.payload.message_type();
-        self.finalized = true;
     }
 }
 
 impl<'buffer, T: AsRef<[u8]> + 'buffer> Parseable<NetlinkMessage> for NetlinkBuffer<&'buffer T> {
-    fn parse(&self) -> Result<NetlinkMessage> {
+    fn parse(&self) -> Result<NetlinkMessage, DecodeError> {
         use self::NetlinkPayload::*;
-        let header = <Self as Parseable<NetlinkHeader>>::parse(self)?;
+        let header = <Self as Parseable<NetlinkHeader>>::parse(self)
+            .context("failed to parse netlink header")?;
 
         let payload = match header.message_type() {
             NLMSG_ERROR => {
-                let msg: ErrorMessage = ErrorBuffer::new(&self.payload()).parse()?;
+                let msg: ErrorMessage = ErrorBuffer::new(&self.payload())
+                    .parse()
+                    .context("failed to parse NLMSG_ERROR")?;
                 if msg.code >= 0 {
                     Ack(msg as AckMessage)
                 } else {
@@ -286,11 +284,7 @@ impl<'buffer, T: AsRef<[u8]> + 'buffer> Parseable<NetlinkMessage> for NetlinkBuf
             #[cfg(not(any(feature = "rtnetlink", feature = "audit")))]
             _ => __Default,
         };
-        Ok(NetlinkMessage {
-            header,
-            payload,
-            finalized: true,
-        })
+        Ok(NetlinkMessage { header, payload })
     }
 }
 

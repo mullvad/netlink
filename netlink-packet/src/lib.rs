@@ -91,7 +91,6 @@
 //!             nlas: [ExtMask(1)]
 //!         }
 //!     ),
-//!     finalized: true
 //! }
 //! ```
 //!

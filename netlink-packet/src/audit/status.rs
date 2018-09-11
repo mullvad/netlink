@@ -1,7 +1,7 @@
 use std::mem::size_of;
 use std::ptr;
 
-use {Emitable, NetlinkPacketError, Parseable, Result};
+use {DecodeError, Emitable, Parseable};
 
 pub const AUDIT_STATUS_BUFFER_LEN: usize = 40;
 
@@ -128,9 +128,13 @@ impl StatusMessage {
         self
     }
 
-    fn from_bytes(buf: &[u8]) -> Result<Self> {
+    fn from_bytes(buf: &[u8]) -> Result<Self, DecodeError> {
         if buf.len() != size_of::<Self>() {
-            return Err(NetlinkPacketError::Decode);
+            return Err(format!(
+                "invalid status message, expected length {}, got {}",
+                size_of::<Self>(),
+                buf.len()
+            ).into());
         }
         Ok(unsafe { ptr::read(buf.as_ptr() as *const Self) })
     }
@@ -151,7 +155,7 @@ impl Emitable for StatusMessage {
 }
 
 impl<T: AsRef<[u8]>> Parseable<StatusMessage> for T {
-    fn parse(&self) -> Result<StatusMessage> {
+    fn parse(&self) -> Result<StatusMessage, DecodeError> {
         StatusMessage::from_bytes(self.as_ref())
     }
 }

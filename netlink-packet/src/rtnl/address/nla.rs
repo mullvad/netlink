@@ -1,8 +1,10 @@
-use byteorder::{ByteOrder, NativeEndian};
 use std::mem::size_of;
 
+use byteorder::{ByteOrder, NativeEndian};
+use failure::ResultExt;
+
 use utils::{parse_string, parse_u32};
-use {DefaultNla, NativeNla, Nla, NlaBuffer, Parseable, Result};
+use {DecodeError, DefaultNla, NativeNla, Nla, NlaBuffer, Parseable};
 
 use constants::*;
 
@@ -94,20 +96,25 @@ impl Nla for AddressNla {
 }
 
 impl<'buffer, T: AsRef<[u8]> + ?Sized> Parseable<AddressNla> for NlaBuffer<&'buffer T> {
-    fn parse(&self) -> Result<AddressNla> {
+    fn parse(&self) -> Result<AddressNla, DecodeError> {
         use self::AddressNla::*;
         let payload = self.value();
         Ok(match self.kind() {
             IFA_UNSPEC => Unspec(payload.to_vec()),
             IFA_ADDRESS => Address(payload.to_vec()),
             IFA_LOCAL => Local(payload.to_vec()),
-            IFA_LABEL => Label(parse_string(payload)?),
+            IFA_LABEL => Label(parse_string(payload).context("invalid IFA_LABEL value")?),
             IFA_BROADCAST => Broadcast(payload.to_vec()),
             IFA_ANYCAST => Anycast(payload.to_vec()),
-            IFA_CACHEINFO => CacheInfo(AddressCacheInfo::from_bytes(payload)?),
+            IFA_CACHEINFO => CacheInfo(
+                AddressCacheInfo::from_bytes(payload).context("invalid IFA_CACHEINFO value")?,
+            ),
             IFA_MULTICAST => Multicast(payload.to_vec()),
-            IFA_FLAGS => Flags(parse_u32(payload)?),
-            _ => Other(<Self as Parseable<DefaultNla>>::parse(self)?),
+            IFA_FLAGS => Flags(parse_u32(payload).context("invalid IFA_FLAGS value")?),
+            kind => Other(
+                <Self as Parseable<DefaultNla>>::parse(self)
+                    .context(format!("unknown NLA type {}", kind))?,
+            ),
         })
     }
 }

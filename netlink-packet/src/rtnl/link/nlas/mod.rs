@@ -16,10 +16,11 @@ mod tests;
 use std::mem::size_of;
 
 use byteorder::{ByteOrder, NativeEndian};
+use failure::ResultExt;
 
 use constants::*;
 use utils::{parse_i32, parse_string, parse_u32, parse_u8};
-use {DefaultNla, Emitable, NativeNla, Nla, NlaBuffer, Parseable, Result};
+use {DecodeError, DefaultNla, Emitable, NativeNla, Nla, NlaBuffer, Parseable};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum LinkNla {
@@ -306,7 +307,7 @@ impl Nla for LinkNla {
 }
 
 impl<'buffer, T: AsRef<[u8]> + ?Sized> Parseable<LinkNla> for NlaBuffer<&'buffer T> {
-    fn parse(&self) -> Result<LinkNla> {
+    fn parse(&self) -> Result<LinkNla, DecodeError> {
         use self::LinkNla::*;
         let payload = self.value();
         Ok(match self.kind() {
@@ -335,45 +336,86 @@ impl<'buffer, T: AsRef<[u8]> + ?Sized> Parseable<LinkNla> for NlaBuffer<&'buffer
             IFLA_ADDRESS => Address(payload.to_vec()),
             IFLA_BROADCAST => Broadcast(payload.to_vec()),
             // String
-            IFLA_IFNAME => IfName(parse_string(payload)?),
-            IFLA_QDISC => Qdisc(parse_string(payload)?),
-            IFLA_IFALIAS => IfAlias(parse_string(payload)?),
-            IFLA_PHYS_PORT_NAME => PhysPortName(parse_string(payload)?),
+            IFLA_IFNAME => IfName(parse_string(payload).context("invalid IFLA_IFNAME value")?),
+            IFLA_QDISC => Qdisc(parse_string(payload).context("invalid IFLA_QDISC value")?),
+            IFLA_IFALIAS => IfAlias(parse_string(payload).context("invalid IFLA_IFALIAS value")?),
+            IFLA_PHYS_PORT_NAME => {
+                PhysPortName(parse_string(payload).context("invalid IFLA_PHYS_PORT_NAME value")?)
+            }
 
             // u8
-            IFLA_LINKMODE => LinkMode(parse_u8(payload)?),
-            IFLA_CARRIER => Carrier(parse_u8(payload)?),
-            IFLA_PROTO_DOWN => ProtoDown(parse_u8(payload)?),
+            IFLA_LINKMODE => LinkMode(parse_u8(payload).context("invalid IFLA_LINKMODE value")?),
+            IFLA_CARRIER => Carrier(parse_u8(payload).context("invalid IFLA_CARRIER value")?),
+            IFLA_PROTO_DOWN => {
+                ProtoDown(parse_u8(payload).context("invalid IFLA_PROTO_DOWN value")?)
+            }
 
             // u32
-            IFLA_MTU => Mtu(parse_u32(payload)?),
-            IFLA_LINK => Link(parse_u32(payload)?),
-            IFLA_MASTER => Master(parse_u32(payload)?),
-            IFLA_TXQLEN => TxQueueLen(parse_u32(payload)?),
-            IFLA_NET_NS_PID => NetNsPid(parse_u32(payload)?),
-            IFLA_NUM_VF => NumVf(parse_u32(payload)?),
-            IFLA_GROUP => Group(parse_u32(payload)?),
-            IFLA_NET_NS_FD => NetnsFd(parse_u32(payload)?),
-            IFLA_EXT_MASK => ExtMask(parse_u32(payload)?),
-            IFLA_PROMISCUITY => Promiscuity(parse_u32(payload)?),
-            IFLA_NUM_TX_QUEUES => NumTxQueues(parse_u32(payload)?),
-            IFLA_NUM_RX_QUEUES => NumRxQueues(parse_u32(payload)?),
-            IFLA_CARRIER_CHANGES => CarrierChanges(parse_u32(payload)?),
-            IFLA_GSO_MAX_SEGS => GsoMaxSegs(parse_u32(payload)?),
-            IFLA_GSO_MAX_SIZE => GsoMaxSize(parse_u32(payload)?),
+            IFLA_MTU => Mtu(parse_u32(payload).context("invalid IFLA_MTU value")?),
+            IFLA_LINK => Link(parse_u32(payload).context("invalid IFLA_LINK value")?),
+            IFLA_MASTER => Master(parse_u32(payload).context("invalid IFLA_MASTER value")?),
+            IFLA_TXQLEN => TxQueueLen(parse_u32(payload).context("invalid IFLA_TXQLEN value")?),
+            IFLA_NET_NS_PID => {
+                NetNsPid(parse_u32(payload).context("invalid IFLA_NET_NS_PID value")?)
+            }
+            IFLA_NUM_VF => NumVf(parse_u32(payload).context("invalid IFLA_NUM_VF value")?),
+            IFLA_GROUP => Group(parse_u32(payload).context("invalid IFLA_GROUP value")?),
+            IFLA_NET_NS_FD => NetnsFd(parse_u32(payload).context("invalid IFLA_NET_NS_FD value")?),
+            IFLA_EXT_MASK => ExtMask(parse_u32(payload).context("invalid IFLA_EXT_MASK value")?),
+            IFLA_PROMISCUITY => {
+                Promiscuity(parse_u32(payload).context("invalid IFLA_PROMISCUITY value")?)
+            }
+            IFLA_NUM_TX_QUEUES => {
+                NumTxQueues(parse_u32(payload).context("invalid IFLA_NUM_TX_QUEUES value")?)
+            }
+            IFLA_NUM_RX_QUEUES => {
+                NumRxQueues(parse_u32(payload).context("invalid IFLA_NUM_RX_QUEUES value")?)
+            }
+            IFLA_CARRIER_CHANGES => {
+                CarrierChanges(parse_u32(payload).context("invalid IFLA_CARRIER_CHANGES value")?)
+            }
+            IFLA_GSO_MAX_SEGS => {
+                GsoMaxSegs(parse_u32(payload).context("invalid IFLA_GSO_MAX_SEGS value")?)
+            }
+            IFLA_GSO_MAX_SIZE => {
+                GsoMaxSize(parse_u32(payload).context("invalid IFLA_GSO_MAX_SIZE value")?)
+            }
 
             // i32
-            IFLA_LINK_NETNSID => LinkNetnsId(parse_i32(payload)?),
+            IFLA_LINK_NETNSID => {
+                LinkNetnsId(parse_i32(payload).context("invalid IFLA_LINK_NETNSID value")?)
+            }
 
-            IFLA_OPERSTATE => OperState(parse_u8(payload)?.into()),
-            IFLA_MAP => Map(LinkMap::from_bytes(payload)?),
-            IFLA_STATS => Stats(LinkStats32::from_bytes(payload)?),
-            IFLA_STATS64 => Stats64(LinkStats64::from_bytes(payload)?),
-            IFLA_AF_SPEC => AfSpec(NlaBuffer::new_checked(payload)?.parse()?),
+            IFLA_OPERSTATE => OperState(
+                parse_u8(payload)
+                    .context("invalid IFLA_OPERSTATE value")?
+                    .into(),
+            ),
+            IFLA_MAP => Map(LinkMap::from_bytes(payload).context("invalid IFLA_MAP value")?),
+            IFLA_STATS => {
+                Stats(LinkStats32::from_bytes(payload).context("invalid IFLA_STATS value")?)
+            }
+            IFLA_STATS64 => {
+                Stats64(LinkStats64::from_bytes(payload).context("invalid IFLA_STATS64 value")?)
+            }
+            IFLA_AF_SPEC => AfSpec(
+                NlaBuffer::new_checked(payload)
+                    .context("invalid IFLA_AF_SPEC value")?
+                    .parse()
+                    .context("invalid IFLA_AF_SPEC value")?,
+            ),
 
-            IFLA_LINKINFO => LinkInfo(NlaBuffer::new_checked(payload)?.parse()?),
+            IFLA_LINKINFO => LinkInfo(
+                NlaBuffer::new_checked(payload)
+                    .context("invalid IFLA_LINKINFO value")?
+                    .parse()
+                    .context("invalid IFLA_LINKINFO value")?,
+            ),
             // default nlas
-            _ => Other(<Self as Parseable<DefaultNla>>::parse(self)?),
+            _ => Other(
+                <Self as Parseable<DefaultNla>>::parse(self)
+                    .context("invalid link NLA value (unknown type)")?,
+            ),
         })
     }
 }

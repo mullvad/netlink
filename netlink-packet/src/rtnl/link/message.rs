@@ -1,4 +1,6 @@
-use {Emitable, Parseable, Result};
+use failure::ResultExt;
+
+use {DecodeError, Emitable, Parseable};
 
 use super::{LinkBuffer, LinkHeader, LinkNla};
 
@@ -56,10 +58,12 @@ impl Emitable for LinkMessage {
 }
 
 impl<'buffer, T: AsRef<[u8]> + 'buffer> Parseable<LinkMessage> for LinkBuffer<&'buffer T> {
-    fn parse(&self) -> Result<LinkMessage> {
+    fn parse(&self) -> Result<LinkMessage, DecodeError> {
         Ok(LinkMessage {
-            header: self.parse()?,
-            nlas: self.parse()?,
+            header: self
+                .parse()
+                .context("failed to parse link message header")?,
+            nlas: self.parse().context("failed to parse link message NLAs")?,
         })
     }
 }
@@ -68,7 +72,7 @@ impl<'buffer, T: AsRef<[u8]> + 'buffer> Parseable<LinkMessage> for LinkBuffer<&'
 // fail on a single nla, we return an error. Maybe we could have another impl that returns
 // Vec<Result<LinkNla>>.
 impl<'buffer, T: AsRef<[u8]> + 'buffer> Parseable<Vec<LinkNla>> for LinkBuffer<&'buffer T> {
-    fn parse(&self) -> Result<Vec<LinkNla>> {
+    fn parse(&self) -> Result<Vec<LinkNla>, DecodeError> {
         let mut nlas = vec![];
         for nla_buf in self.nlas() {
             nlas.push(nla_buf?.parse()?);

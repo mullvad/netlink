@@ -1,4 +1,4 @@
-use errors::NetlinkIpError;
+use errors::{Error, ErrorKind};
 use eui48::MacAddress;
 use packet::{LinkFlags, LinkLayerType, LinkMessage, LinkNla, LinkState};
 
@@ -251,7 +251,7 @@ impl Link {
         self
     }
 
-    pub fn from_link_message(value: LinkMessage) -> Result<Self, NetlinkIpError> {
+    pub fn from_link_message(value: LinkMessage) -> Result<Self, Error> {
         let (header, mut nlas) = value.into_parts();
         let mut link = Link::default();
         link.set_index(header.index())
@@ -264,7 +264,7 @@ impl Link {
                     // FIXME: we should check the length first. Also we should not assume MAC addresses.
                     link.set_address(
                         MacAddress::from_bytes(&bytes[..])
-                            .map_err(|_| NetlinkIpError::InvalidLinkAddress(bytes.clone()))?,
+                            .map_err(|_| ErrorKind::InvalidHardwareAddress(bytes.clone()))?,
                     )
                 }
                 LinkNla::IfName(name) => link.set_name(name),

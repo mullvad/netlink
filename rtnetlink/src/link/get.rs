@@ -4,7 +4,7 @@ use packet::constants::{NLM_F_DUMP, NLM_F_REQUEST};
 use packet::{LinkMessage, NetlinkFlags, NetlinkMessage, NetlinkPayload, RtnlMessage};
 
 use super::Link;
-use {Handle, NetlinkIpError};
+use {Error, ErrorKind, Handle};
 
 lazy_static! {
     // Flags for `ip link get`
@@ -23,7 +23,7 @@ impl LinkGetRequest {
     }
 
     /// Execute the request
-    pub fn execute(self) -> impl Stream<Item = Link, Error = NetlinkIpError> {
+    pub fn execute(self) -> impl Stream<Item = Link, Error = Error> {
         let LinkGetRequest {
             mut handle,
             message,
@@ -35,9 +35,7 @@ impl LinkGetRequest {
             if let NetlinkPayload::Rtnl(RtnlMessage::NewLink(msg)) = payload {
                 Ok(Link::from_link_message(msg)?)
             } else {
-                Err(NetlinkIpError::UnexpectedMessage(NetlinkMessage::new(
-                    header, payload,
-                )))
+                Err(ErrorKind::UnexpectedMessage(NetlinkMessage::new(header, payload)).into())
             }
         })
     }

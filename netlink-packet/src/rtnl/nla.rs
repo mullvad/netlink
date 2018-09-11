@@ -1,9 +1,10 @@
 use byteorder::{ByteOrder, NativeEndian};
+use failure::ResultExt;
 use std::mem::size_of;
 use std::ptr;
 
 use constants::{NLA_F_NESTED, NLA_F_NET_BYTEORDER, NLA_TYPE_MASK};
-use {Emitable, Field, NetlinkPacketError, Parseable, Result};
+use {DecodeError, Emitable, Field, Parseable};
 
 const LENGTH: Field = 0..2;
 const TYPE: Field = 2..4;
@@ -24,16 +25,31 @@ impl<T: AsRef<[u8]>> NlaBuffer<T> {
         NlaBuffer { buffer }
     }
 
-    pub fn new_checked(buffer: T) -> Result<NlaBuffer<T>> {
+    pub fn new_checked(buffer: T) -> Result<NlaBuffer<T>, DecodeError> {
         let buffer = Self::new(buffer);
-        buffer.check_buffer_length()?;
+        buffer.check_buffer_length().context("invalid NLA buffer")?;
         Ok(buffer)
     }
 
-    pub fn check_buffer_length(&self) -> Result<()> {
+    pub fn check_buffer_length(&self) -> Result<(), DecodeError> {
         let len = self.buffer.as_ref().len();
-        if len < TYPE.end || (self.length() as usize) < TYPE.end {
-            Err(NetlinkPacketError::Decode)
+        if len < TYPE.end {
+            Err(format!(
+                "buffer has length {}, but an NLA header is {} bytes",
+                len, TYPE.end
+            ).into())
+        } else if len < self.length() as usize {
+            Err(format!(
+                "buffer has length: {}, but the NLA is {} bytes",
+                len,
+                self.length()
+            ).into())
+        } else if (self.length() as usize) < TYPE.end {
+            Err(format!(
+                "NLA has invalid length: {} (should be at least {} bytes",
+                self.length(),
+                TYPE.end,
+            ).into())
         } else {
             Ok(())
         }
@@ -142,7 +158,7 @@ impl Nla for DefaultNla {
 }
 
 impl<'buffer, T: AsRef<[u8]> + ?Sized> Parseable<DefaultNla> for NlaBuffer<&'buffer T> {
-    fn parse(&self) -> Result<DefaultNla> {
+    fn parse(&self) -> Result<DefaultNla, DecodeError> {
         Ok(DefaultNla {
             kind: self.kind(),
             value: self.value().to_vec(),
@@ -217,7 +233,7 @@ impl<T> NlasIterator<T> {
 }
 
 impl<'buffer, T: AsRef<[u8]> + ?Sized + 'buffer> Iterator for NlasIterator<&'buffer T> {
-    type Item = Result<NlaBuffer<&'buffer [u8]>>;
+    type Item = Result<NlaBuffer<&'buffer [u8]>, DecodeError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         // Nlas are aligned on 4 bytes boundaries, so we make sure we ignore any potential
@@ -250,9 +266,13 @@ pub(crate) trait NativeNla
 where
     Self: Copy,
 {
-    fn from_bytes(buf: &[u8]) -> Result<Self> {
+    fn from_bytes(buf: &[u8]) -> Result<Self, DecodeError> {
         if buf.len() != size_of::<Self>() {
-            return Err(NetlinkPacketError::Decode);
+            return Err(format!(
+                "NLA value has length {}, but expected {}",
+                buf.len(),
+                size_of::<Self>(),
+            ).into());
         }
         Ok(unsafe { ptr::read(buf.as_ptr() as *const Self) })
     }

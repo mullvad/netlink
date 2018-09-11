@@ -1,5 +1,7 @@
+use failure::ResultExt;
+
 use super::{AddressBuffer, AddressNla};
-use {Emitable, Parseable, Result, ADDRESS_HEADER_LEN};
+use {DecodeError, Emitable, Parseable, ADDRESS_HEADER_LEN};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct AddressMessage {
@@ -44,7 +46,7 @@ impl Emitable for AddressMessage {
 }
 
 impl<T: AsRef<[u8]>> Parseable<AddressHeader> for AddressBuffer<T> {
-    fn parse(&self) -> Result<AddressHeader> {
+    fn parse(&self) -> Result<AddressHeader, DecodeError> {
         Ok(AddressHeader {
             family: self.family(),
             prefix_len: self.prefix_len(),
@@ -56,10 +58,14 @@ impl<T: AsRef<[u8]>> Parseable<AddressHeader> for AddressBuffer<T> {
 }
 
 impl<'buffer, T: AsRef<[u8]> + 'buffer> Parseable<AddressMessage> for AddressBuffer<&'buffer T> {
-    fn parse(&self) -> Result<AddressMessage> {
+    fn parse(&self) -> Result<AddressMessage, DecodeError> {
         Ok(AddressMessage {
-            header: self.parse()?,
-            nlas: self.parse()?,
+            header: self
+                .parse()
+                .context("failed to parse address message header")?,
+            nlas: self
+                .parse()
+                .context("failed to parse address message NLAs")?,
         })
     }
 }
@@ -68,7 +74,7 @@ impl<'buffer, T: AsRef<[u8]> + 'buffer> Parseable<AddressMessage> for AddressBuf
 // fail on a single nla, we return an error. Maybe we could have another impl that returns
 // Vec<Result<Address>>.
 impl<'buffer, T: AsRef<[u8]> + 'buffer> Parseable<Vec<AddressNla>> for AddressBuffer<&'buffer T> {
-    fn parse(&self) -> Result<Vec<AddressNla>> {
+    fn parse(&self) -> Result<Vec<AddressNla>, DecodeError> {
         let mut nlas = vec![];
         for nla_buf in self.nlas() {
             nlas.push(nla_buf?.parse()?);

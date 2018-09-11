@@ -4,7 +4,7 @@ use futures::sync::mpsc::{unbounded, UnboundedSender};
 use futures::{Async, Future, Poll, Stream};
 use netlink_packet::NetlinkMessage;
 
-use errors::NetlinkProtoError;
+use errors::{Error, ErrorKind};
 
 type RequestsTx = UnboundedSender<(UnboundedSender<NetlinkMessage>, NetlinkMessage)>;
 
@@ -28,7 +28,7 @@ impl ConnectionHandle {
     pub fn request(
         &mut self,
         msg: NetlinkMessage,
-    ) -> impl Stream<Item = NetlinkMessage, Error = NetlinkProtoError> {
+    ) -> impl Stream<Item = NetlinkMessage, Error = Error> {
         let (tx, rx) = unbounded::<NetlinkMessage>();
         // Ignore the result. If this failed, `tx` will be dropped when this funtion returns, and
         // polling rx with fail, carrying the error.
@@ -36,26 +36,23 @@ impl ConnectionHandle {
         let _ = UnboundedSender::unbounded_send(&self.requests_tx, (tx, msg));
         rx.map_err(|()| {
             error!("could not forward new request to connection: the connection is closed");
-            NetlinkProtoError::ConnectionClosed
+            ErrorKind::ConnectionClosed.into()
         })
     }
 
     pub fn buffered_request(
         &mut self,
         msg: NetlinkMessage,
-    ) -> impl Future<Item = Vec<NetlinkMessage>, Error = NetlinkProtoError> {
+    ) -> impl Future<Item = Vec<NetlinkMessage>, Error = Error> {
         Stream2Vec::new(self.request(msg))
     }
 
-    pub fn acked_request(
-        &mut self,
-        msg: NetlinkMessage,
-    ) -> impl Future<Item = (), Error = NetlinkProtoError> {
+    pub fn acked_request(&mut self, msg: NetlinkMessage) -> impl Future<Item = (), Error = Error> {
         self.request(msg).for_each(|msg| {
             if msg.is_error() {
-                Err(NetlinkProtoError::ErrorMessage(msg))
+                Err(ErrorKind::NetlinkError(msg).into())
             } else {
-                Err(NetlinkProtoError::ErrorMessage(msg))
+                Ok(())
             }
         })
     }
@@ -70,9 +67,9 @@ impl<S, T> Stream2Vec<S, T> {
     }
 }
 
-impl<S: Stream<Item = T, Error = NetlinkProtoError>, T> Future for Stream2Vec<S, T> {
+impl<S: Stream<Item = T, Error = Error>, T> Future for Stream2Vec<S, T> {
     type Item = Vec<T>;
-    type Error = NetlinkProtoError;
+    type Error = Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
@@ -97,10 +94,10 @@ impl<S: Stream<Item = T, Error = NetlinkProtoError>, T> Future for Stream2Vec<S,
 //
 // impl<S> Future for Stream2Ack<S>
 // where
-//     S: Stream<Item = NetlinkMessage, Error = NetlinkProtoError>,
+//     S: Stream<Item = NetlinkMessage, Error = Error>,
 // {
 //     type Item = ();
-//     type Error = NetlinkProtoError;
+//     type Error = Error;
 //
 //     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
 //         match self.0.poll()? {
@@ -109,9 +106,9 @@ impl<S: Stream<Item = T, Error = NetlinkProtoError>, T> Future for Stream2Vec<S,
 //             Async::Ready(None) => Ok(Async::Ready(())),
 //             Async::Ready(Some(msg)) => {
 //                 if msg.is_error() {
-//                     Err(NetlinkProtoError::ErrorMessage(msg.clone()))
+//                     Err(ErrorKind::NetlinkError(msg.clone()))
 //                 } else {
-//                     Err(NetlinkProtoError::ErrorMessage(msg))
+//                     Err(ErrorKind::NetlinkError(msg))
 //                 }
 //             }
 //         }

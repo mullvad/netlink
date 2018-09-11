@@ -1,5 +1,5 @@
 use byteorder::{ByteOrder, NativeEndian};
-use {Field, Index, NlaBuffer, NlasIterator, Rest, Result};
+use {DecodeError, Field, Index, NlaBuffer, NlasIterator, Rest};
 
 use super::{LinkFlags, LinkLayerType};
 
@@ -72,7 +72,7 @@ impl<'a, T: AsRef<[u8]> + ?Sized> LinkBuffer<&'a T> {
         &data[ATTRIBUTES]
     }
 
-    pub fn nlas(&self) -> impl Iterator<Item = Result<NlaBuffer<&'a [u8]>>> {
+    pub fn nlas(&self) -> impl Iterator<Item = Result<NlaBuffer<&'a [u8]>, DecodeError>> {
         NlasIterator::new(self.payload())
     }
 }

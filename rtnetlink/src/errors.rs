@@ -1,26 +1,58 @@
-use netlink_proto::NetlinkProtoError;
+use failure::{Backtrace, Context, Fail};
 use packet::NetlinkMessage;
-use std::io;
+use std::fmt::{self, Display};
 
-#[derive(Fail, Debug)]
-pub enum NetlinkIpError {
-    #[fail(display = "{}", _0)]
-    Io(#[cause] io::Error),
+#[derive(Debug)]
+pub struct Error {
+    inner: Context<ErrorKind>,
+}
 
-    #[fail(display = "Received an unexpected message")]
+#[derive(Clone, Eq, PartialEq, Debug, Fail)]
+pub enum ErrorKind {
+    #[fail(display = "Received an unexpected message {:?}", _0)]
     UnexpectedMessage(NetlinkMessage),
 
     #[fail(
-        display = "Received a link message (RTM_GETLINK, RTM_NEWLINK, RTM_SETLINK or RTMGETLINK) with an invalid hardware address attribute."
+        display = "Received a link message (RTM_GETLINK, RTM_NEWLINK, RTM_SETLINK or RTMGETLINK) with an invalid hardware address attribute: {:?}.",
+        _0
     )]
-    InvalidLinkAddress(Vec<u8>),
+    InvalidHardwareAddress(Vec<u8>),
 
-    #[fail(display = "{}", _0)]
-    Protocol(NetlinkProtoError),
+    #[fail(display = "Request failed")]
+    RequestFailed,
 }
 
-impl From<NetlinkProtoError> for NetlinkIpError {
-    fn from(err: NetlinkProtoError) -> Self {
-        NetlinkIpError::Protocol(err)
+impl Fail for Error {
+    fn cause(&self) -> Option<&Fail> {
+        self.inner.cause()
+    }
+
+    fn backtrace(&self) -> Option<&Backtrace> {
+        self.inner.backtrace()
+    }
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Display::fmt(&self.inner, f)
+    }
+}
+impl Error {
+    pub fn kind(&self) -> ErrorKind {
+        self.inner.get_context().clone()
+    }
+}
+
+impl From<ErrorKind> for Error {
+    fn from(kind: ErrorKind) -> Error {
+        Error {
+            inner: Context::new(kind),
+        }
+    }
+}
+
+impl From<Context<ErrorKind>> for Error {
+    fn from(inner: Context<ErrorKind>) -> Error {
+        Error { inner }
     }
 }

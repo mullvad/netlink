@@ -1,9 +1,10 @@
 use byteorder::{ByteOrder, NativeEndian};
 use constants::*;
+use failure::ResultExt;
 use rtnl::{LinkBuffer, LinkHeader, LinkMessage, LinkNla};
 use std::mem::size_of;
 use utils::{parse_mac, parse_string, parse_u16, parse_u32, parse_u64, parse_u8};
-use {DefaultNla, Emitable, NetlinkPacketError, Nla, NlaBuffer, NlasIterator, Parseable, Result};
+use {DecodeError, DefaultNla, Emitable, Nla, NlaBuffer, NlasIterator, Parseable};
 
 const DUMMY: &str = "dummy";
 const IFB: &str = "ifb";
@@ -82,7 +83,7 @@ impl Nla for LinkInfo {
 // XXX: we cannot impl Parseable<LinkInfo> because some attributes depend on each other. To parse
 // IFLA_INFO_DATA we first need to parse the preceding IFLA_INFO_KIND for example.
 impl<'buffer, T: AsRef<[u8]> + ?Sized> Parseable<Vec<LinkInfo>> for NlaBuffer<&'buffer T> {
-    fn parse(&self) -> Result<Vec<LinkInfo>> {
+    fn parse(&self) -> Result<Vec<LinkInfo>, DecodeError> {
         let mut res = Vec::new();
         let nlas = NlasIterator::new(self.into_inner());
         let mut link_info_kind: Option<LinkInfoKind> = None;
@@ -108,8 +109,8 @@ impl<'buffer, T: AsRef<[u8]> + ?Sized> Parseable<Vec<LinkInfo>> for NlaBuffer<&'
                                 let mut v = Vec::new();
                                 for nla in NlasIterator::new(payload) {
                                     v.push(<NlaBuffer<_> as Parseable<LinkInfoBridge>>::parse(
-                                        &nla?,
-                                    )?);
+                                        &nla.context("failed to parse IFLA_INFO_DATA (IFLA_INFO_KIND is 'bridge')")?,
+                                    ).context("failed to parse IFLA_INFO_DATA (IFLA_INFO_KIND is 'bridge')")?);
                                 }
                                 LinkInfoData::Bridge(v)
                             }
@@ -117,8 +118,8 @@ impl<'buffer, T: AsRef<[u8]> + ?Sized> Parseable<Vec<LinkInfo>> for NlaBuffer<&'
                                 let mut v = Vec::new();
                                 for nla in NlasIterator::new(payload) {
                                     v.push(<NlaBuffer<_> as Parseable<LinkInfoVlan>>::parse(
-                                        &nla?,
-                                    )?);
+                                        &nla.context("failed to parse IFLA_INFO_DATA (IFLA_INFO_KIND is 'vlan')")?,
+                                    ).context("failed to parse IFLA_INFO_DATA (IFLA_INFO_KIND is 'vlan')")?);
                                 }
                                 LinkInfoData::Vlan(v)
                             }
@@ -127,9 +128,11 @@ impl<'buffer, T: AsRef<[u8]> + ?Sized> Parseable<Vec<LinkInfo>> for NlaBuffer<&'
                             LinkInfoKind::Veth => {
                                 let buffer = LinkBuffer::new(&payload);
                                 let header =
-                                    <LinkBuffer<_> as Parseable<LinkHeader>>::parse(&buffer)?;
+                                    <LinkBuffer<_> as Parseable<LinkHeader>>::parse(&buffer)
+                                        .context("failed to parse veth link info")?;
                                 let nlas =
-                                    <LinkBuffer<_> as Parseable<Vec<LinkNla>>>::parse(&buffer)?;
+                                    <LinkBuffer<_> as Parseable<Vec<LinkNla>>>::parse(&buffer)
+                                        .context("failed to parse veth link info")?;
                                 LinkInfoData::Veth(LinkMessage::from_parts(header, nlas))
                             }
                             LinkInfoKind::Vxlan => LinkInfoData::Vxlan(payload.to_vec()),
@@ -150,11 +153,11 @@ impl<'buffer, T: AsRef<[u8]> + ?Sized> Parseable<Vec<LinkInfo>> for NlaBuffer<&'
                         };
                         res.push(LinkInfo::Data(info_data));
                     } else {
-                        return Err(NetlinkPacketError::Decode);
+                        return Err("IFLA_INFO_DATA is not preceded by an IFLA_INFO_KIND".into());
                     }
                     link_info_kind = None;
                 }
-                _ => return Err(NetlinkPacketError::Decode),
+                _ => return Err(format!("unknown NLA type {}", nla.kind()).into()),
             }
         }
         Ok(res)
@@ -345,12 +348,15 @@ impl Nla for LinkInfoKind {
 }
 
 impl<'buffer, T: AsRef<[u8]> + ?Sized> Parseable<LinkInfoKind> for NlaBuffer<&'buffer T> {
-    fn parse(&self) -> Result<LinkInfoKind> {
+    fn parse(&self) -> Result<LinkInfoKind, DecodeError> {
         use self::LinkInfoKind::*;
         if self.kind() != IFLA_INFO_KIND {
-            return Err(NetlinkPacketError::Decode);
+            return Err(format!(
+                "failed to parse IFLA_INFO_KIND: NLA type is {}",
+                self.kind()
+            ).into());
         }
-        let s = parse_string(self.value())?;
+        let s = parse_string(self.value()).context("invalid IFLA_INFO_KIND value")?;
         Ok(match s.as_str() {
             DUMMY => Dummy,
             IFB => Ifb,
@@ -437,25 +443,28 @@ impl Nla for LinkInfoVlan {
 }
 
 impl<'buffer, T: AsRef<[u8]> + ?Sized> Parseable<LinkInfoVlan> for NlaBuffer<&'buffer T> {
-    fn parse(&self) -> Result<LinkInfoVlan> {
+    fn parse(&self) -> Result<LinkInfoVlan, DecodeError> {
         use self::LinkInfoVlan::*;
         let payload = self.value();
         Ok(match self.kind() {
             IFLA_VLAN_UNSPEC => Unspec(payload.to_vec()),
-            IFLA_VLAN_ID => Id(parse_u16(payload)?),
+            IFLA_VLAN_ID => Id(parse_u16(payload).context("invalid IFLA_VLAN_ID value")?),
             IFLA_VLAN_FLAGS => {
+                let err = "invalid IFLA_VLAN_FLAGS value";
                 let u32len = size_of::<u32>();
                 if payload.len() != (u32len * 2) {
-                    return Err(NetlinkPacketError::Decode);
+                    return Err(err.into());
                 }
-                let flags = parse_u32(&payload[0..u32len])?;
-                let mask = parse_u32(&payload[u32len..])?;
+                let flags = parse_u32(&payload[0..u32len]).context(err)?;
+                let mask = parse_u32(&payload[u32len..]).context(err)?;
                 Flags((flags, mask))
             }
             IFLA_VLAN_EGRESS_QOS => EgressQos(payload.to_vec()),
             IFLA_VLAN_INGRESS_QOS => IngressQos(payload.to_vec()),
-            IFLA_VLAN_PROTOCOL => Protocol(parse_u16(payload)?),
-            _ => return Err(NetlinkPacketError::Decode),
+            IFLA_VLAN_PROTOCOL => {
+                Protocol(parse_u16(payload).context("invalid IFLA_VLAN_PROTOCOL value")?)
+            }
+            _ => return Err(format!("unknown NLA type {}", self.kind()).into()),
         })
     }
 }
@@ -699,47 +708,90 @@ impl Nla for LinkInfoBridge {
 }
 
 impl<'buffer, T: AsRef<[u8]> + ?Sized> Parseable<LinkInfoBridge> for NlaBuffer<&'buffer T> {
-    fn parse(&self) -> Result<LinkInfoBridge> {
+    fn parse(&self) -> Result<LinkInfoBridge, DecodeError> {
         use self::LinkInfoBridge::*;
         let payload = self.value();
         Ok(match self.kind() {
             IFLA_BR_UNSPEC => Unspec(payload.to_vec()),
             IFLA_BR_FDB_FLUSH => FdbFlush(payload.to_vec()),
             IFLA_BR_PAD => Pad(payload.to_vec()),
-            IFLA_BR_HELLO_TIMER => HelloTimer(parse_u64(payload)?),
-            IFLA_BR_TCN_TIMER => TcnTimer(parse_u64(payload)?),
-            IFLA_BR_TOPOLOGY_CHANGE_TIMER => TopologyChangeTimer(parse_u64(payload)?),
-            IFLA_BR_GC_TIMER => GcTimer(parse_u64(payload)?),
-            IFLA_BR_MCAST_LAST_MEMBER_INTVL => MulticastLastMemberInterval(parse_u64(payload)?),
-            IFLA_BR_MCAST_MEMBERSHIP_INTVL => MulticastMembershipInterval(parse_u64(payload)?),
-            IFLA_BR_MCAST_QUERIER_INTVL => MulticastQuerierInterval(parse_u64(payload)?),
-            IFLA_BR_MCAST_QUERY_INTVL => MulticastQueryInterval(parse_u64(payload)?),
-            IFLA_BR_MCAST_QUERY_RESPONSE_INTVL => {
-                MulticastQueryResponseInterval(parse_u64(payload)?)
+            IFLA_BR_HELLO_TIMER => {
+                HelloTimer(parse_u64(payload).context("invalid IFLA_BR_HELLO_TIMER value")?)
             }
-            IFLA_BR_MCAST_STARTUP_QUERY_INTVL => MulticastStartupQueryInterval(parse_u64(payload)?),
-            IFLA_BR_FORWARD_DELAY => ForwardDelay(parse_u32(payload)?),
-            IFLA_BR_HELLO_TIME => HelloTime(parse_u32(payload)?),
-            IFLA_BR_MAX_AGE => MaxAge(parse_u32(payload)?),
-            IFLA_BR_AGEING_TIME => AgeingTime(parse_u32(payload)?),
-            IFLA_BR_STP_STATE => StpState(parse_u32(payload)?),
-            IFLA_BR_MCAST_HASH_ELASTICITY => MulticastHashElasticity(parse_u32(payload)?),
-            IFLA_BR_MCAST_HASH_MAX => MulticastHashMax(parse_u32(payload)?),
-            IFLA_BR_MCAST_LAST_MEMBER_CNT => MulticastLastMemberCount(parse_u32(payload)?),
-            IFLA_BR_MCAST_STARTUP_QUERY_CNT => MulticastStartupQueryCount(parse_u32(payload)?),
-            IFLA_BR_ROOT_PATH_COST => RootPathCost(parse_u32(payload)?),
-            IFLA_BR_PRIORITY => Priority(parse_u16(payload)?),
-            IFLA_BR_VLAN_PROTOCOL => VlanProtocol(parse_u16(payload)?),
-            IFLA_BR_GROUP_FWD_MASK => GroupFwdMask(parse_u16(payload)?),
+            IFLA_BR_TCN_TIMER => {
+                TcnTimer(parse_u64(payload).context("invalid IFLA_BR_TCN_TIMER value")?)
+            }
+            IFLA_BR_TOPOLOGY_CHANGE_TIMER => TopologyChangeTimer(
+                parse_u64(payload).context("invalid IFLA_BR_TOPOLOGY_CHANGE_TIMER value")?,
+            ),
+            IFLA_BR_GC_TIMER => {
+                GcTimer(parse_u64(payload).context("invalid IFLA_BR_GC_TIMER value")?)
+            }
+            IFLA_BR_MCAST_LAST_MEMBER_INTVL => MulticastLastMemberInterval(
+                parse_u64(payload).context("invalid IFLA_BR_MCAST_LAST_MEMBER_INTVL value")?,
+            ),
+            IFLA_BR_MCAST_MEMBERSHIP_INTVL => MulticastMembershipInterval(
+                parse_u64(payload).context("invalid IFLA_BR_MCAST_MEMBERSHIP_INTVL value")?,
+            ),
+            IFLA_BR_MCAST_QUERIER_INTVL => MulticastQuerierInterval(
+                parse_u64(payload).context("invalid IFLA_BR_MCAST_QUERIER_INTVL value")?,
+            ),
+            IFLA_BR_MCAST_QUERY_INTVL => MulticastQueryInterval(
+                parse_u64(payload).context("invalid IFLA_BR_MCAST_QUERY_INTVL value")?,
+            ),
+            IFLA_BR_MCAST_QUERY_RESPONSE_INTVL => MulticastQueryResponseInterval(
+                parse_u64(payload).context("invalid IFLA_BR_MCAST_QUERY_RESPONSE_INTVL value")?,
+            ),
+            IFLA_BR_MCAST_STARTUP_QUERY_INTVL => MulticastStartupQueryInterval(
+                parse_u64(payload).context("invalid IFLA_BR_MCAST_STARTUP_QUERY_INTVL value")?,
+            ),
+            IFLA_BR_FORWARD_DELAY => {
+                ForwardDelay(parse_u32(payload).context("invalid IFLA_BR_FORWARD_DELAY value")?)
+            }
+            IFLA_BR_HELLO_TIME => {
+                HelloTime(parse_u32(payload).context("invalid IFLA_BR_HELLO_TIME value")?)
+            }
+            IFLA_BR_MAX_AGE => MaxAge(parse_u32(payload).context("invalid IFLA_BR_MAX_AGE value")?),
+            IFLA_BR_AGEING_TIME => {
+                AgeingTime(parse_u32(payload).context("invalid IFLA_BR_AGEING_TIME value")?)
+            }
+            IFLA_BR_STP_STATE => {
+                StpState(parse_u32(payload).context("invalid IFLA_BR_STP_STATE value")?)
+            }
+            IFLA_BR_MCAST_HASH_ELASTICITY => MulticastHashElasticity(
+                parse_u32(payload).context("invalid IFLA_BR_MCAST_HASH_ELASTICITY value")?,
+            ),
+            IFLA_BR_MCAST_HASH_MAX => MulticastHashMax(
+                parse_u32(payload).context("invalid IFLA_BR_MCAST_HASH_MAX value")?,
+            ),
+            IFLA_BR_MCAST_LAST_MEMBER_CNT => MulticastLastMemberCount(
+                parse_u32(payload).context("invalid IFLA_BR_MCAST_LAST_MEMBER_CNT value")?,
+            ),
+            IFLA_BR_MCAST_STARTUP_QUERY_CNT => MulticastStartupQueryCount(
+                parse_u32(payload).context("invalid IFLA_BR_MCAST_STARTUP_QUERY_CNT value")?,
+            ),
+            IFLA_BR_ROOT_PATH_COST => {
+                RootPathCost(parse_u32(payload).context("invalid IFLA_BR_ROOT_PATH_COST value")?)
+            }
+            IFLA_BR_PRIORITY => {
+                Priority(parse_u16(payload).context("invalid IFLA_BR_PRIORITY value")?)
+            }
+            IFLA_BR_VLAN_PROTOCOL => {
+                VlanProtocol(parse_u16(payload).context("invalid IFLA_BR_VLAN_PROTOCOL value")?)
+            }
+            IFLA_BR_GROUP_FWD_MASK => {
+                GroupFwdMask(parse_u16(payload).context("invalid IFLA_BR_GROUP_FWD_MASK value")?)
+            }
             IFLA_BR_ROOT_ID | IFLA_BR_BRIDGE_ID => {
                 // XXX: we cannot do size_of::<BridgeId>() because Rust structs may contain padding
                 // for better alignment.
                 if payload.len() != size_of::<u16>() + size_of::<[u8; 6]>() {
-                    return Err(NetlinkPacketError::Decode);
+                    return Err("invalid IFLA_BR_ROOT_ID or IFLA_BR_BRIDGE_ID value".into());
                 }
 
                 let priority = NativeEndian::read_u16(&payload[..2]);
-                let address = parse_mac(&payload[2..])?;
+                let address = parse_mac(&payload[2..])
+                    .context("invalid IFLA_BR_ROOT_ID or IFLA_BR_BRIDGE_ID value")?;
 
                 match self.kind() {
                     IFLA_BR_ROOT_ID => RootId((priority, address)),
@@ -747,24 +799,61 @@ impl<'buffer, T: AsRef<[u8]> + ?Sized> Parseable<LinkInfoBridge> for NlaBuffer<&
                     _ => unreachable!(),
                 }
             }
-            IFLA_BR_GROUP_ADDR => GroupAddr(parse_mac(payload)?),
-            IFLA_BR_ROOT_PORT => RootPort(parse_u16(payload)?),
-            IFLA_BR_VLAN_DEFAULT_PVID => VlanDefaultPvid(parse_u16(payload)?),
-            IFLA_BR_VLAN_FILTERING => VlanFiltering(parse_u8(payload)?),
-            IFLA_BR_TOPOLOGY_CHANGE => TopologyChange(parse_u8(payload)?),
-            IFLA_BR_TOPOLOGY_CHANGE_DETECTED => TopologyChangeDetected(parse_u8(payload)?),
-            IFLA_BR_MCAST_ROUTER => MulticastRouter(parse_u8(payload)?),
-            IFLA_BR_MCAST_SNOOPING => MulticastSnooping(parse_u8(payload)?),
-            IFLA_BR_MCAST_QUERY_USE_IFADDR => MulticastQueryUseIfaddr(parse_u8(payload)?),
-            IFLA_BR_MCAST_QUERIER => MulticastQuerier(parse_u8(payload)?),
-            IFLA_BR_NF_CALL_IPTABLES => NfCallIpTables(parse_u8(payload)?),
-            IFLA_BR_NF_CALL_IP6TABLES => NfCallIp6Tables(parse_u8(payload)?),
-            IFLA_BR_NF_CALL_ARPTABLES => NfCallArpTables(parse_u8(payload)?),
-            IFLA_BR_VLAN_STATS_ENABLED => VlanStatsEnabled(parse_u8(payload)?),
-            IFLA_BR_MCAST_STATS_ENABLED => MulticastStatsEnabled(parse_u8(payload)?),
-            IFLA_BR_MCAST_IGMP_VERSION => MulticastIgmpVersion(parse_u8(payload)?),
-            IFLA_BR_MCAST_MLD_VERSION => MulticastMldVersion(parse_u8(payload)?),
-            _ => Other(<Self as Parseable<DefaultNla>>::parse(self)?),
+            IFLA_BR_GROUP_ADDR => {
+                GroupAddr(parse_mac(payload).context("invalid IFLA_BR_GROUP_ADDR value")?)
+            }
+            IFLA_BR_ROOT_PORT => {
+                RootPort(parse_u16(payload).context("invalid IFLA_BR_ROOT_PORT value")?)
+            }
+            IFLA_BR_VLAN_DEFAULT_PVID => VlanDefaultPvid(
+                parse_u16(payload).context("invalid IFLA_BR_VLAN_DEFAULT_PVID value")?,
+            ),
+            IFLA_BR_VLAN_FILTERING => {
+                VlanFiltering(parse_u8(payload).context("invalid IFLA_BR_VLAN_FILTERING value")?)
+            }
+            IFLA_BR_TOPOLOGY_CHANGE => {
+                TopologyChange(parse_u8(payload).context("invalid IFLA_BR_TOPOLOGY_CHANGE value")?)
+            }
+            IFLA_BR_TOPOLOGY_CHANGE_DETECTED => TopologyChangeDetected(
+                parse_u8(payload).context("invalid IFLA_BR_TOPOLOGY_CHANGE_DETECTED value")?,
+            ),
+            IFLA_BR_MCAST_ROUTER => {
+                MulticastRouter(parse_u8(payload).context("invalid IFLA_BR_MCAST_ROUTER value")?)
+            }
+            IFLA_BR_MCAST_SNOOPING => MulticastSnooping(
+                parse_u8(payload).context("invalid IFLA_BR_MCAST_SNOOPING value")?,
+            ),
+            IFLA_BR_MCAST_QUERY_USE_IFADDR => MulticastQueryUseIfaddr(
+                parse_u8(payload).context("invalid IFLA_BR_MCAST_QUERY_USE_IFADDR value")?,
+            ),
+            IFLA_BR_MCAST_QUERIER => {
+                MulticastQuerier(parse_u8(payload).context("invalid IFLA_BR_MCAST_QUERIER value")?)
+            }
+            IFLA_BR_NF_CALL_IPTABLES => {
+                NfCallIpTables(parse_u8(payload).context("invalid IFLA_BR_NF_CALL_IPTABLES value")?)
+            }
+            IFLA_BR_NF_CALL_IP6TABLES => NfCallIp6Tables(
+                parse_u8(payload).context("invalid IFLA_BR_NF_CALL_IP6TABLES value")?,
+            ),
+            IFLA_BR_NF_CALL_ARPTABLES => NfCallArpTables(
+                parse_u8(payload).context("invalid IFLA_BR_NF_CALL_ARPTABLES value")?,
+            ),
+            IFLA_BR_VLAN_STATS_ENABLED => VlanStatsEnabled(
+                parse_u8(payload).context("invalid IFLA_BR_VLAN_STATS_ENABLED value")?,
+            ),
+            IFLA_BR_MCAST_STATS_ENABLED => MulticastStatsEnabled(
+                parse_u8(payload).context("invalid IFLA_BR_MCAST_STATS_ENABLED value")?,
+            ),
+            IFLA_BR_MCAST_IGMP_VERSION => MulticastIgmpVersion(
+                parse_u8(payload).context("invalid IFLA_BR_MCAST_IGMP_VERSION value")?,
+            ),
+            IFLA_BR_MCAST_MLD_VERSION => MulticastMldVersion(
+                parse_u8(payload).context("invalid IFLA_BR_MCAST_MLD_VERSION value")?,
+            ),
+            _ => Other(
+                <Self as Parseable<DefaultNla>>::parse(self)
+                    .context("invalid link info bridge NLA value (unknown type)")?,
+            ),
         })
     }
 }

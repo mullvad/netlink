@@ -2,11 +2,12 @@ mod metrics;
 
 pub use self::metrics::RouteMetricsNla;
 use byteorder::{ByteOrder, NativeEndian};
+use failure::ResultExt;
 use std::mem::size_of;
 
 use constants::*;
 use utils::{parse_u16, parse_u32};
-use {DefaultNla, Emitable, NativeNla, Nla, NlaBuffer, Parseable, Result};
+use {DecodeError, DefaultNla, Emitable, NativeNla, Nla, NlaBuffer, Parseable};
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -178,7 +179,7 @@ impl Nla for RouteNla {
 }
 
 impl<'buffer, T: AsRef<[u8]> + ?Sized> Parseable<RouteNla> for NlaBuffer<&'buffer T> {
-    fn parse(&self) -> Result<RouteNla> {
+    fn parse(&self) -> Result<RouteNla, DecodeError> {
         use self::RouteNla::*;
         let payload = self.value();
         Ok(match self.kind() {
@@ -198,18 +199,34 @@ impl<'buffer, T: AsRef<[u8]> + ?Sized> Parseable<RouteNla> for NlaBuffer<&'buffe
             RTA_PAD => Pad(payload.to_vec()),
             RTA_UID => Uid(payload.to_vec()),
             RTA_TTL_PROPAGATE => TtlPropagate(payload.to_vec()),
-            RTA_ENCAP_TYPE => EncapType(parse_u16(payload)?),
-            RTA_IIF => Iif(parse_u32(payload)?),
-            RTA_OIF => Oif(parse_u32(payload)?),
-            RTA_PRIORITY => Priority(parse_u32(payload)?),
-            RTA_PROTOINFO => ProtocolInfo(parse_u32(payload)?),
-            RTA_FLOW => Flow(parse_u32(payload)?),
-            RTA_TABLE => Table(parse_u32(payload)?),
-            RTA_MARK => Mark(parse_u32(payload)?),
-            RTA_CACHEINFO => CacheInfo(RouteCacheInfo::from_bytes(payload)?),
-            RTA_MFC_STATS => MfcStats(RouteMfcStats::from_bytes(payload)?),
-            RTA_METRICS => Metrics(NlaBuffer::new_checked(payload)?.parse()?),
-            _ => Other(<Self as Parseable<DefaultNla>>::parse(self)?),
+            RTA_ENCAP_TYPE => {
+                EncapType(parse_u16(payload).context("invalid RTA_ENCAP_TYPE value")?)
+            }
+            RTA_IIF => Iif(parse_u32(payload).context("invalid RTA_IIF value")?),
+            RTA_OIF => Oif(parse_u32(payload).context("invalid RTA_OIF value")?),
+            RTA_PRIORITY => Priority(parse_u32(payload).context("invalid RTA_PRIORITY value")?),
+            RTA_PROTOINFO => {
+                ProtocolInfo(parse_u32(payload).context("invalid RTA_PROTOINFO value")?)
+            }
+            RTA_FLOW => Flow(parse_u32(payload).context("invalid RTA_FLOW value")?),
+            RTA_TABLE => Table(parse_u32(payload).context("invalid RTA_TABLE value")?),
+            RTA_MARK => Mark(parse_u32(payload).context("invalid RTA_MARK value")?),
+            RTA_CACHEINFO => CacheInfo(
+                RouteCacheInfo::from_bytes(payload).context("invalid RTA_CACHEINFO value")?,
+            ),
+            RTA_MFC_STATS => {
+                MfcStats(RouteMfcStats::from_bytes(payload).context("invalid RTA_MFC_STATS value")?)
+            }
+            RTA_METRICS => Metrics(
+                NlaBuffer::new_checked(payload)
+                    .context("invalid RTA_METRICS value")?
+                    .parse()
+                    .context("invalid RTA_METRICS value")?,
+            ),
+            _ => Other(
+                <Self as Parseable<DefaultNla>>::parse(self)
+                    .context("invalid NLA (unknown kind)")?,
+            ),
         })
     }
 }

@@ -1,6 +1,6 @@
 use byteorder::{ByteOrder, NativeEndian};
 
-use {Field, Index, NlaBuffer, NlasIterator, Rest, Result};
+use {DecodeError, Field, Index, NlaBuffer, NlasIterator, Rest};
 
 const FAMILY: Index = 0;
 const PREFIX_LEN: Index = 1;
@@ -58,7 +58,7 @@ impl<'a, T: AsRef<[u8]> + ?Sized> AddressBuffer<&'a T> {
         &data[ATTRIBUTES]
     }
 
-    pub fn nlas(&self) -> impl Iterator<Item = Result<NlaBuffer<&'a [u8]>>> {
+    pub fn nlas(&self) -> impl Iterator<Item = Result<NlaBuffer<&'a [u8]>, DecodeError>> {
         NlasIterator::new(self.payload())
     }
 }

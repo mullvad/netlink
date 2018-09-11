@@ -1,4 +1,4 @@
-use {Emitable, Parseable, Result};
+use {DecodeError, Emitable, Parseable};
 
 use constants::*;
 
@@ -351,7 +351,7 @@ pub struct RouteHeader {
 }
 
 impl<'a, T: AsRef<[u8]> + ?Sized> Parseable<RouteHeader> for RouteBuffer<&'a T> {
-    fn parse(&self) -> Result<RouteHeader> {
+    fn parse(&self) -> Result<RouteHeader, DecodeError> {
         Ok(RouteHeader {
             address_family: self.address_family(),
             destination_length: self.destination_length(),

@@ -35,7 +35,6 @@ fn main() {
         .for_each(|(packet, _addr)| {
             println!("<<< {:?}", packet);
             Ok(())
-        })
-        .wait()
+        }).wait()
         .unwrap();
 }

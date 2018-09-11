@@ -1,6 +1,6 @@
 use super::header::*;
 use byteorder::{ByteOrder, NativeEndian};
-use {Field, Index, NlaBuffer, NlasIterator, Rest, Result};
+use {DecodeError, Field, Index, NlaBuffer, NlasIterator, Rest};
 
 const ADDRESS_FAMILY: Index = 0;
 const DEST_LENGTH: Index = 1;
@@ -92,7 +92,7 @@ impl<'a, T: AsRef<[u8]> + ?Sized> RouteBuffer<&'a T> {
         &data[ATTRIBUTES]
     }
 
-    pub fn nlas(&self) -> impl Iterator<Item = Result<NlaBuffer<&'a [u8]>>> {
+    pub fn nlas(&self) -> impl Iterator<Item = Result<NlaBuffer<&'a [u8]>, DecodeError>> {
         NlasIterator::new(self.payload())
     }
 }

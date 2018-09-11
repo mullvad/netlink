@@ -1,9 +1,7 @@
 use byteorder::{ByteOrder, NativeEndian};
+use failure::ResultExt;
 use std::mem::size_of;
-use {
-    Emitable, Field, NetlinkBuffer, NetlinkHeader, NetlinkPacketError, Parseable, Rest, Result,
-    NETLINK_HEADER_LEN,
-};
+use {DecodeError, Emitable, Field, NetlinkBuffer, NetlinkHeader, Parseable, Rest};
 
 const CODE: Field = 0..4;
 const PAYLOAD: Rest = 4..;
@@ -74,12 +72,12 @@ impl Emitable for ErrorMessage {
 }
 
 impl<'buffer, T: AsRef<[u8]> + 'buffer> Parseable<ErrorMessage> for ErrorBuffer<&'buffer T> {
-    fn parse(&self) -> Result<ErrorMessage> {
+    fn parse(&self) -> Result<ErrorMessage, DecodeError> {
         let header: NetlinkHeader = {
-            if self.payload().len() < NETLINK_HEADER_LEN {
-                return Err(NetlinkPacketError::Decode);
-            }
-            NetlinkBuffer::new(self.payload()).parse()?
+            NetlinkBuffer::new_checked(self.payload())
+                .context("failed to parse netlink header")?
+                .parse()
+                .context("failed to parse nelink header")?
         };
         Ok(ErrorMessage {
             code: self.code(),

@@ -19,8 +19,10 @@
 pub use super::inet::LinkAfInetNla;
 pub use super::inet6::LinkAfInet6Nla;
 
+use failure::ResultExt;
+
 use constants::*;
-use {DefaultNla, Emitable, Nla, NlaBuffer, NlasIterator, Parseable, Result};
+use {DecodeError, DefaultNla, Emitable, Nla, NlaBuffer, NlasIterator, Parseable};
 
 // FIXME: There are many of those that I don't know how to parse. Help welcome.
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -204,7 +206,7 @@ impl Nla for LinkAfSpecNla {
 }
 
 impl<'buffer, T: AsRef<[u8]> + ?Sized> Parseable<LinkAfSpecNla> for NlaBuffer<&'buffer T> {
-    fn parse(&self) -> Result<LinkAfSpecNla> {
+    fn parse(&self) -> Result<LinkAfSpecNla, DecodeError> {
         use self::LinkAfSpecNla::*;
         let payload = self.value();
         Ok(match self.kind() {
@@ -212,15 +214,21 @@ impl<'buffer, T: AsRef<[u8]> + ?Sized> Parseable<LinkAfSpecNla> for NlaBuffer<&'
             AF_INET => {
                 let mut nlas = vec![];
                 for nla in NlasIterator::new(payload) {
-                    nlas.push(<Parseable<LinkAfInetNla>>::parse(&(nla?))?);
+                    let nla = nla.context("invalid AF_INET value")?;
+                    nlas.push(
+                        <Parseable<LinkAfInetNla>>::parse(&nla).context("invalid AF_INET value")?,
+                    );
                 }
                 Inet(nlas)
             }
             AF_INET6 => {
                 let mut nlas = vec![];
                 for nla in NlasIterator::new(payload) {
-                    // nlas.push(LinkAfInet6Nla::parse(&nla?)?)
-                    nlas.push(<Parseable<LinkAfInet6Nla>>::parse(&(nla?))?);
+                    let nla = nla.context("invalid AF_INET6 value")?;
+                    nlas.push(
+                        <Parseable<LinkAfInet6Nla>>::parse(&nla)
+                            .context("invalid AF_INET6 value")?,
+                    );
                 }
                 Inet6(nlas)
             }
@@ -258,7 +266,10 @@ impl<'buffer, T: AsRef<[u8]> + ?Sized> Parseable<LinkAfSpecNla> for NlaBuffer<&'
             AF_IEEE802154 => Ieee802154(payload.to_vec()),
             AF_CAIF => Caif(payload.to_vec()),
             AF_ALG => Alg(payload.to_vec()),
-            _ => LinkAfSpecNla::Other(<Self as Parseable<DefaultNla>>::parse(self)?),
+            kind => LinkAfSpecNla::Other(
+                <Self as Parseable<DefaultNla>>::parse(self)
+                    .context(format!("Unknown NLA type {}", kind))?,
+            ),
         })
     }
 }

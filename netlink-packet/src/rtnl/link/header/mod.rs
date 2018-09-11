@@ -4,7 +4,7 @@ mod link_layer_type;
 pub use self::link_layer_type::*;
 
 use super::{LinkBuffer, LINK_HEADER_LEN};
-use {Emitable, Parseable, Result};
+use {DecodeError, Emitable, Parseable};
 
 /// High level representation of `RTM_GETLINK`, `RTM_SETLINK`, `RTM_NEWLINK` and `RTM_DELLING`
 /// messages headers.
@@ -187,7 +187,7 @@ impl Emitable for LinkHeader {
 }
 
 impl<T: AsRef<[u8]>> Parseable<LinkHeader> for LinkBuffer<T> {
-    fn parse(&self) -> Result<LinkHeader> {
+    fn parse(&self) -> Result<LinkHeader, DecodeError> {
         Ok(LinkHeader {
             address_family: self.address_family(),
             link_layer_type: self.link_layer_type(),

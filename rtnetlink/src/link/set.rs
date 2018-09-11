@@ -4,7 +4,7 @@ use futures::Future;
 use packet::constants::{IFF_UP, NLM_F_ACK, NLM_F_CREATE, NLM_F_EXCL, NLM_F_REQUEST};
 use packet::{LinkFlags, LinkMessage, LinkNla, NetlinkFlags, NetlinkMessage, RtnlMessage};
 
-use {Handle, NetlinkIpError};
+use {Error, Handle};
 
 lazy_static! {
     // Flags for `ip link set`
@@ -25,7 +25,7 @@ impl LinkSetRequest {
     }
 
     /// Execute the request
-    pub fn execute(self) -> impl Future<Item = (), Error = NetlinkIpError> {
+    pub fn execute(self) -> impl Future<Item = (), Error = Error> {
         let LinkSetRequest {
             mut handle,
             message,

@@ -8,10 +8,10 @@ use netlink_packet::NetlinkMessage;
 use netlink_sys::{Protocol, SocketAddr, TokioSocket};
 use std::collections::VecDeque;
 
+use errors::Error;
+
 use super::codecs::NetlinkCodec;
 use super::framed::NetlinkFramed;
-
-use Result;
 
 type RequestsRx = UnboundedReceiver<(UnboundedSender<NetlinkMessage>, NetlinkMessage)>;
 
@@ -106,7 +106,7 @@ impl Connection {
         trace!("all the buffered requests have been sent");
     }
 
-    fn buffer_request(&mut self, request: NetlinkMessage) -> Result<()> {
+    fn buffer_request(&mut self, request: NetlinkMessage) -> Result<(), Error> {
         if self.requests_buffer.len() == self.requests_buffer.capacity() {
             // we should drop the request and return an error
             unimplemented!()

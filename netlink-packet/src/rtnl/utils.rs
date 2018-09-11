@@ -1,10 +1,13 @@
-use byteorder::{ByteOrder, NativeEndian};
 use std::mem::size_of;
-use {NetlinkPacketError, Result};
 
-pub fn parse_mac(payload: &[u8]) -> Result<[u8; 6]> {
+use byteorder::{ByteOrder, NativeEndian};
+use failure::ResultExt;
+
+use DecodeError;
+
+pub fn parse_mac(payload: &[u8]) -> Result<[u8; 6], DecodeError> {
     if payload.len() != 6 {
-        return Err(NetlinkPacketError::Decode);
+        return Err(format!("invalid MAC address: {:?}", payload).into());
     }
     let mut address: [u8; 6] = [0; 6];
     for (i, byte) in payload.into_iter().enumerate() {
@@ -13,9 +16,9 @@ pub fn parse_mac(payload: &[u8]) -> Result<[u8; 6]> {
     Ok(address)
 }
 
-pub fn parse_ipv6(payload: &[u8]) -> Result<[u8; 16]> {
+pub fn parse_ipv6(payload: &[u8]) -> Result<[u8; 16], DecodeError> {
     if payload.len() != 16 {
-        return Err(NetlinkPacketError::Decode);
+        return Err(format!("invalid IPv6 address: {:?}", payload).into());
     }
     let mut address: [u8; 16] = [0; 16];
     for (i, byte) in payload.into_iter().enumerate() {
@@ -24,46 +27,45 @@ pub fn parse_ipv6(payload: &[u8]) -> Result<[u8; 16]> {
     Ok(address)
 }
 
-pub fn parse_string(payload: &[u8]) -> Result<String> {
+pub fn parse_string(payload: &[u8]) -> Result<String, DecodeError> {
     if payload.is_empty() {
         return Ok(String::new());
     }
-    let s = String::from_utf8(payload[..payload.len() - 1].to_vec())
-        .map_err(|_| NetlinkPacketError::Decode)?;
+    let s = String::from_utf8(payload[..payload.len() - 1].to_vec()).context("invalid string")?;
     Ok(s)
 }
 
-pub fn parse_u8(payload: &[u8]) -> Result<u8> {
+pub fn parse_u8(payload: &[u8]) -> Result<u8, DecodeError> {
     if payload.len() != 1 {
-        return Err(NetlinkPacketError::Decode);
+        return Err(format!("invalid u8: {:?}", payload).into());
     }
     Ok(payload[0])
 }
 
-pub fn parse_u32(payload: &[u8]) -> Result<u32> {
+pub fn parse_u32(payload: &[u8]) -> Result<u32, DecodeError> {
     if payload.len() != size_of::<u32>() {
-        return Err(NetlinkPacketError::Decode);
+        return Err(format!("invalid u32: {:?}", payload).into());
     }
     Ok(NativeEndian::read_u32(payload))
 }
 
-pub fn parse_u64(payload: &[u8]) -> Result<u64> {
+pub fn parse_u64(payload: &[u8]) -> Result<u64, DecodeError> {
     if payload.len() != size_of::<u64>() {
-        return Err(NetlinkPacketError::Decode);
+        return Err(format!("invalid u64: {:?}", payload).into());
     }
     Ok(NativeEndian::read_u64(payload))
 }
 
-pub fn parse_u16(payload: &[u8]) -> Result<u16> {
+pub fn parse_u16(payload: &[u8]) -> Result<u16, DecodeError> {
     if payload.len() != size_of::<u16>() {
-        return Err(NetlinkPacketError::Decode);
+        return Err(format!("invalid u16: {:?}", payload).into());
     }
     Ok(NativeEndian::read_u16(payload))
 }
 
-pub fn parse_i32(payload: &[u8]) -> Result<i32> {
+pub fn parse_i32(payload: &[u8]) -> Result<i32, DecodeError> {
     if payload.len() != 4 {
-        return Err(NetlinkPacketError::Decode);
+        return Err(format!("invalid u32: {:?}", payload).into());
     }
     Ok(NativeEndian::read_i32(payload))
 }

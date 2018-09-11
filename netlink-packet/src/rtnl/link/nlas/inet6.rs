@@ -1,11 +1,12 @@
 use std::mem::size_of;
 
 use byteorder::{ByteOrder, NativeEndian};
+use failure::ResultExt;
 
 use constants::*;
 
 use utils::{parse_ipv6, parse_u32, parse_u8};
-use {DefaultNla, NativeNla, Nla, NlaBuffer, Parseable, Result};
+use {DecodeError, DefaultNla, NativeNla, Nla, NlaBuffer, Parseable};
 
 #[repr(C)]
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
@@ -196,19 +197,38 @@ impl Nla for LinkAfInet6Nla {
 }
 
 impl<'buffer, T: AsRef<[u8]> + ?Sized> Parseable<LinkAfInet6Nla> for NlaBuffer<&'buffer T> {
-    fn parse(&self) -> Result<LinkAfInet6Nla> {
+    fn parse(&self) -> Result<LinkAfInet6Nla, DecodeError> {
         use self::LinkAfInet6Nla::*;
         let payload = self.value();
         Ok(match self.kind() {
             IFLA_INET6_UNSPEC => Unspec(payload.to_vec()),
-            IFLA_INET6_FLAGS => Flags(parse_u32(payload)?),
-            IFLA_INET6_CACHEINFO => CacheInfo(LinkInet6CacheInfo::from_bytes(payload)?),
-            IFLA_INET6_CONF => DevConf(Box::new(LinkInet6DevConf::from_bytes(payload)?)),
-            IFLA_INET6_STATS => Stats(Box::new(LinkInet6Stats::from_bytes(payload)?)),
-            IFLA_INET6_ICMP6STATS => IcmpStats(LinkIcmp6Stats::from_bytes(payload)?),
-            IFLA_INET6_TOKEN => Token(parse_ipv6(payload)?),
-            IFLA_INET6_ADDR_GEN_MODE => AddrGenMode(parse_u8(payload)?),
-            _ => Other(<Self as Parseable<DefaultNla>>::parse(self)?),
+            IFLA_INET6_FLAGS => {
+                Flags(parse_u32(payload).context("invalid IFLA_INET6_FLAGS value")?)
+            }
+            IFLA_INET6_CACHEINFO => CacheInfo(
+                LinkInet6CacheInfo::from_bytes(payload)
+                    .context("invalid IFLA_INET6_CACHEINFO value")?,
+            ),
+            IFLA_INET6_CONF => DevConf(Box::new(
+                LinkInet6DevConf::from_bytes(payload).context("invalid IFLA_INET6_CONF value")?,
+            )),
+            IFLA_INET6_STATS => Stats(Box::new(
+                LinkInet6Stats::from_bytes(payload).context("invalid IFLA_INET6_STATS value")?,
+            )),
+            IFLA_INET6_ICMP6STATS => IcmpStats(
+                LinkIcmp6Stats::from_bytes(payload)
+                    .context("invalid IFLA_INET6_ICMP6STATS value")?,
+            ),
+            IFLA_INET6_TOKEN => {
+                Token(parse_ipv6(payload).context("invalid IFLA_INET6_TOKEN value")?)
+            }
+            IFLA_INET6_ADDR_GEN_MODE => {
+                AddrGenMode(parse_u8(payload).context("invalid IFLA_INET6_ADDR_GEN_MODE value")?)
+            }
+            kind => Other(
+                <Self as Parseable<DefaultNla>>::parse(self)
+                    .context(format!("unknown NLA type {}", kind))?,
+            ),
         })
     }
 }

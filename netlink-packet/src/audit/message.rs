@@ -1,5 +1,7 @@
+use failure::ResultExt;
+
 use constants::*;
-use {Emitable, NetlinkPacketError, Parseable, Result, RuleBuffer, RuleMessage, StatusMessage};
+use {DecodeError, Emitable, Parseable, RuleBuffer, RuleMessage, StatusMessage};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum AuditMessage {
@@ -63,18 +65,41 @@ impl AuditMessage {
         }
     }
 
-    pub(crate) fn parse(message_type: u16, buffer: &[u8]) -> Result<Self> {
+    pub(crate) fn parse(message_type: u16, buffer: &[u8]) -> Result<Self, DecodeError> {
         use self::AuditMessage::*;
 
         let message = match message_type {
             AUDIT_GET if buffer.is_empty() => GetStatus(None),
-            AUDIT_GET => GetStatus(Some(buffer.parse()?)),
-            AUDIT_SET => SetStatus(buffer.parse()?),
-            AUDIT_ADD_RULE => AddRule(RuleBuffer::new_checked(&buffer)?.parse()?),
-            AUDIT_DEL_RULE => DelRule(RuleBuffer::new_checked(&buffer)?.parse()?),
+            AUDIT_GET => GetStatus(Some(
+                buffer
+                    .parse()
+                    .context("failed to parse AUDIT_GET message")?,
+            )),
+            AUDIT_SET => SetStatus(
+                buffer
+                    .parse()
+                    .context("failed to parse AUDIT_SET message")?,
+            ),
+            AUDIT_ADD_RULE => AddRule(
+                RuleBuffer::new_checked(&buffer)
+                    .context("failed to parse AUDIT_ADD_RULE message")?
+                    .parse()
+                    .context("failed to parse AUDIT_ADD_RULE message")?,
+            ),
+            AUDIT_DEL_RULE => DelRule(
+                RuleBuffer::new_checked(&buffer)
+                    .context("failed to parse AUDIT_DEL_RULE message")?
+                    .parse()
+                    .context("failed to parse AUDIT_DEL_RULE message")?,
+            ),
             AUDIT_LIST_RULES if buffer.is_empty() => ListRules(None),
-            AUDIT_LIST_RULES => ListRules(Some(RuleBuffer::new_checked(&buffer)?.parse()?)),
-            _ => return Err(NetlinkPacketError::Decode),
+            AUDIT_LIST_RULES => ListRules(Some(
+                RuleBuffer::new_checked(&buffer)
+                    .context("failed to parse AUDIT_LIST_RULES message")?
+                    .parse()
+                    .context("failed to parse AUDIT_LIST_RULES message")?,
+            )),
+            _ => return Err(format!("unknown message type {}", message_type).into()),
         };
         Ok(message)
     }

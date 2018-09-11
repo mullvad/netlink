@@ -1,5 +1,5 @@
 use super::{NetlinkBuffer, NetlinkFlags, NETLINK_HEADER_LEN};
-use {Emitable, Parseable, Result};
+use {DecodeError, Emitable, Parseable};
 
 /// A Netlink header representation.
 ///
@@ -208,7 +208,7 @@ impl Emitable for NetlinkHeader {
 }
 
 impl<'a, T: AsRef<[u8]> + ?Sized> Parseable<NetlinkHeader> for NetlinkBuffer<&'a T> {
-    fn parse(&self) -> Result<NetlinkHeader> {
+    fn parse(&self) -> Result<NetlinkHeader, DecodeError> {
         Ok(NetlinkHeader {
             length: self.length(),
             message_type: self.message_type(),

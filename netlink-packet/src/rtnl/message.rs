@@ -1,9 +1,7 @@
 use constants::*;
+use failure::ResultExt;
 
-use {
-    AddressBuffer, AddressMessage, Emitable, LinkBuffer, LinkMessage, NetlinkPacketError,
-    Parseable, Result,
-};
+use {AddressBuffer, AddressMessage, DecodeError, Emitable, LinkBuffer, LinkMessage, Parseable};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum RtnlMessage {
@@ -87,12 +85,14 @@ impl RtnlMessage {
         }
     }
 
-    pub(crate) fn parse(message_type: u16, buffer: &[u8]) -> Result<Self> {
+    pub(crate) fn parse(message_type: u16, buffer: &[u8]) -> Result<Self, DecodeError> {
         use self::RtnlMessage::*;
         let message = match message_type {
             // Link messages
             RTM_NEWLINK | RTM_GETLINK | RTM_DELLINK | RTM_SETLINK => {
-                let msg: LinkMessage = LinkBuffer::new(&buffer).parse()?;
+                let msg: LinkMessage = LinkBuffer::new(&buffer)
+                    .parse()
+                    .context("invalid link message")?;
                 match message_type {
                     RTM_NEWLINK => NewLink(msg),
                     RTM_GETLINK => GetLink(msg),
@@ -103,7 +103,9 @@ impl RtnlMessage {
             }
             // Address messages
             RTM_NEWADDR | RTM_GETADDR | RTM_DELADDR => {
-                let msg: AddressMessage = AddressBuffer::new(&buffer).parse()?;
+                let msg: AddressMessage = AddressBuffer::new(&buffer)
+                    .parse()
+                    .context("invalid address message")?;
                 match message_type {
                     RTM_NEWADDR => NewAddress(msg),
                     RTM_GETADDR => GetAddress(msg),
@@ -111,7 +113,7 @@ impl RtnlMessage {
                     _ => unreachable!(),
                 }
             }
-            _ => return Err(NetlinkPacketError::Decode),
+            _ => return Err(format!("Unknown message type: {}", message_type).into()),
         };
         Ok(message)
     }
