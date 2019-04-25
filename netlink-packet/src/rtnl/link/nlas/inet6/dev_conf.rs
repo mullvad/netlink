@@ -53,7 +53,8 @@ const ADDR_GEN_MODE: Field = 188..192;
 const DISABLE_POLICY: Field = 192..196;
 const ACCEPT_RA_RT_INFO_MIN_PLEN: Field = 196..200;
 const NDISC_TCLASS: Field = 200..204;
-pub const LINK_INET6_DEV_CONF_LEN: usize = NDISC_TCLASS.end;
+pub const LINK_INET6_DEV_CONF_MIN_LEN: usize = RTR_SOLICIT_MAX_INTERVAL.end;
+pub const LINK_INET6_DEV_CONF_MAX_LEN: usize = NDISC_TCLASS.end;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct LinkInet6DevConfBuffer<T> {
@@ -73,435 +74,452 @@ impl<T: AsRef<[u8]>> LinkInet6DevConfBuffer<T> {
 
     fn check_buffer_length(&self) -> Result<(), DecodeError> {
         let len = self.buffer.as_ref().len();
-        if len < LINK_INET6_DEV_CONF_LEN {
+        if len < LINK_INET6_DEV_CONF_MIN_LEN || len > LINK_INET6_DEV_CONF_MAX_LEN {
             return Err(format!(
-                "invalid LinkInet6DevConfBuffer buffer: length is {} instead of {}",
-                len, LINK_INET6_DEV_CONF_LEN
+                "invalid LinkInet6DevConfBuffer buffer: length is {} instead of between {} and {}",
+                len, LINK_INET6_DEV_CONF_MIN_LEN, LINK_INET6_DEV_CONF_MAX_LEN
             )
             .into());
         }
         Ok(())
     }
+
+    fn safe_read(&self, field: Field) -> i32 {
+        if self.buffer.as_ref().len() <= field.end {
+            0
+        } else {
+            return NativeEndian::read_i32(&self.buffer.as_ref()[field])
+        }
+    }
+
     pub fn forwarding(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[FORWARDING])
+        self.safe_read(FORWARDING)
     }
 
     pub fn hoplimit(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[HOPLIMIT])
+        self.safe_read(HOPLIMIT)
     }
 
     pub fn mtu6(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[MTU6])
+        self.safe_read(MTU6)
     }
 
     pub fn accept_ra(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[ACCEPT_RA])
+        self.safe_read(ACCEPT_RA)
     }
 
     pub fn accept_redirects(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[ACCEPT_REDIRECTS])
+        self.safe_read(ACCEPT_REDIRECTS)
     }
 
     pub fn autoconf(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[AUTOCONF])
+        self.safe_read(AUTOCONF)
     }
 
     pub fn dad_transmits(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[DAD_TRANSMITS])
+        self.safe_read(DAD_TRANSMITS)
     }
 
     pub fn rtr_solicits(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[RTR_SOLICITS])
+        self.safe_read(RTR_SOLICITS)
     }
 
     pub fn rtr_solicit_interval(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[RTR_SOLICIT_INTERVAL])
+        self.safe_read(RTR_SOLICIT_INTERVAL)
     }
 
     pub fn rtr_solicit_delay(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[RTR_SOLICIT_DELAY])
+        self.safe_read(RTR_SOLICIT_DELAY)
     }
 
     pub fn use_tempaddr(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[USE_TEMPADDR])
+        self.safe_read(USE_TEMPADDR)
     }
 
     pub fn temp_valid_lft(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[TEMP_VALID_LFT])
+        self.safe_read(TEMP_VALID_LFT)
     }
 
     pub fn temp_prefered_lft(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[TEMP_PREFERED_LFT])
+        self.safe_read(TEMP_PREFERED_LFT)
     }
 
     pub fn regen_max_retry(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[REGEN_MAX_RETRY])
+        self.safe_read(REGEN_MAX_RETRY)
     }
 
     pub fn max_desync_factor(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[MAX_DESYNC_FACTOR])
+        self.safe_read(MAX_DESYNC_FACTOR)
     }
 
     pub fn max_addresses(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[MAX_ADDRESSES])
+        self.safe_read(MAX_ADDRESSES)
     }
 
     pub fn force_mld_version(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[FORCE_MLD_VERSION])
+        self.safe_read(FORCE_MLD_VERSION)
     }
 
     pub fn accept_ra_defrtr(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[ACCEPT_RA_DEFRTR])
+        self.safe_read(ACCEPT_RA_DEFRTR)
     }
 
     pub fn accept_ra_pinfo(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[ACCEPT_RA_PINFO])
+        self.safe_read(ACCEPT_RA_PINFO)
     }
 
     pub fn accept_ra_rtr_pref(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[ACCEPT_RA_RTR_PREF])
+        self.safe_read(ACCEPT_RA_RTR_PREF)
     }
 
     pub fn rtr_probe_interval(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[RTR_PROBE_INTERVAL])
+        self.safe_read(RTR_PROBE_INTERVAL)
     }
 
     pub fn accept_ra_rt_info_max_plen(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[ACCEPT_RA_RT_INFO_MAX_PLEN])
+        self.safe_read(ACCEPT_RA_RT_INFO_MAX_PLEN)
     }
 
     pub fn proxy_ndp(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[PROXY_NDP])
+        self.safe_read(PROXY_NDP)
     }
 
     pub fn optimistic_dad(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[OPTIMISTIC_DAD])
+        self.safe_read(OPTIMISTIC_DAD)
     }
 
     pub fn accept_source_route(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[ACCEPT_SOURCE_ROUTE])
+        self.safe_read(ACCEPT_SOURCE_ROUTE)
     }
 
     pub fn mc_forwarding(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[MC_FORWARDING])
+        self.safe_read(MC_FORWARDING)
     }
 
     pub fn disable_ipv6(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[DISABLE_IPV6])
+        self.safe_read(DISABLE_IPV6)
     }
 
     pub fn accept_dad(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[ACCEPT_DAD])
+        self.safe_read(ACCEPT_DAD)
     }
 
     pub fn force_tllao(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[FORCE_TLLAO])
+        self.safe_read(FORCE_TLLAO)
     }
 
     pub fn ndisc_notify(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[NDISC_NOTIFY])
+        self.safe_read(NDISC_NOTIFY)
     }
 
     pub fn mldv1_unsolicited_report_interval(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[MLDV1_UNSOLICITED_REPORT_INTERVAL])
+        self.safe_read(MLDV1_UNSOLICITED_REPORT_INTERVAL)
     }
 
     pub fn mldv2_unsolicited_report_interval(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[MLDV2_UNSOLICITED_REPORT_INTERVAL])
+        self.safe_read(MLDV2_UNSOLICITED_REPORT_INTERVAL)
     }
 
     pub fn suppress_frag_ndisc(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[SUPPRESS_FRAG_NDISC])
+        self.safe_read(SUPPRESS_FRAG_NDISC)
     }
 
     pub fn accept_ra_from_local(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[ACCEPT_RA_FROM_LOCAL])
+        self.safe_read(ACCEPT_RA_FROM_LOCAL)
     }
 
     pub fn use_optimistic(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[USE_OPTIMISTIC])
+        self.safe_read(USE_OPTIMISTIC)
     }
 
     pub fn accept_ra_mtu(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[ACCEPT_RA_MTU])
+        self.safe_read(ACCEPT_RA_MTU)
     }
 
     pub fn stable_secret(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[STABLE_SECRET])
+        self.safe_read(STABLE_SECRET)
     }
 
     pub fn use_oif_addrs_only(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[USE_OIF_ADDRS_ONLY])
+        self.safe_read(USE_OIF_ADDRS_ONLY)
     }
 
     pub fn accept_ra_min_hop_limit(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[ACCEPT_RA_MIN_HOP_LIMIT])
+        self.safe_read(ACCEPT_RA_MIN_HOP_LIMIT)
     }
 
     pub fn ignore_routes_with_linkdown(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[IGNORE_ROUTES_WITH_LINKDOWN])
+        self.safe_read(IGNORE_ROUTES_WITH_LINKDOWN)
     }
 
     pub fn drop_unicast_in_l2_multicast(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[DROP_UNICAST_IN_L2_MULTICAST])
+        self.safe_read(DROP_UNICAST_IN_L2_MULTICAST)
     }
 
     pub fn drop_unsolicited_na(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[DROP_UNSOLICITED_NA])
+        self.safe_read(DROP_UNSOLICITED_NA)
     }
 
     pub fn keep_addr_on_down(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[KEEP_ADDR_ON_DOWN])
+        self.safe_read(KEEP_ADDR_ON_DOWN)
     }
 
     pub fn rtr_solicit_max_interval(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[RTR_SOLICIT_MAX_INTERVAL])
+        self.safe_read(RTR_SOLICIT_MAX_INTERVAL)
     }
 
     pub fn seg6_enabled(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[SEG6_ENABLED])
+        self.safe_read(SEG6_ENABLED)
     }
 
     pub fn seg6_require_hmac(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[SEG6_REQUIRE_HMAC])
+        self.safe_read(SEG6_REQUIRE_HMAC)
     }
 
     pub fn enhanced_dad(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[ENHANCED_DAD])
+        self.safe_read(ENHANCED_DAD)
     }
 
     pub fn addr_gen_mode(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[ADDR_GEN_MODE])
+        self.safe_read(ADDR_GEN_MODE)
     }
 
     pub fn disable_policy(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[DISABLE_POLICY])
+        self.safe_read(DISABLE_POLICY)
     }
 
     pub fn accept_ra_rt_info_min_plen(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[ACCEPT_RA_RT_INFO_MIN_PLEN])
+        self.safe_read(ACCEPT_RA_RT_INFO_MIN_PLEN)
     }
 
     pub fn ndisc_tclass(&self) -> i32 {
-        NativeEndian::read_i32(&self.buffer.as_ref()[NDISC_TCLASS])
+        self.safe_read(NDISC_TCLASS)
     }
 }
 
 impl<T: AsRef<[u8]> + AsMut<[u8]>> LinkInet6DevConfBuffer<T> {
+
+    pub fn safe_write(&mut self, field: Field, value: i32) {
+
+        if self.buffer.as_ref().len() >= field.end {
+            NativeEndian::write_i32(&mut self.buffer.as_mut()[field], value)
+        }
+    }
+
     pub fn set_forwarding(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[FORWARDING], value)
+        self.safe_write(FORWARDING, value)
     }
 
     pub fn set_hoplimit(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[HOPLIMIT], value)
+        self.safe_write(HOPLIMIT, value)
     }
 
     pub fn set_mtu6(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[MTU6], value)
+        self.safe_write(MTU6, value)
     }
 
     pub fn set_accept_ra(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[ACCEPT_RA], value)
+        self.safe_write(ACCEPT_RA, value)
     }
 
     pub fn set_accept_redirects(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[ACCEPT_REDIRECTS], value)
+        self.safe_write(ACCEPT_REDIRECTS, value)
     }
 
     pub fn set_autoconf(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[AUTOCONF], value)
+        self.safe_write(AUTOCONF, value)
     }
 
     pub fn set_dad_transmits(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[DAD_TRANSMITS], value)
+        self.safe_write(DAD_TRANSMITS, value)
     }
 
     pub fn set_rtr_solicits(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[RTR_SOLICITS], value)
+        self.safe_write(RTR_SOLICITS, value)
     }
 
     pub fn set_rtr_solicit_interval(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[RTR_SOLICIT_INTERVAL], value)
+        self.safe_write(RTR_SOLICIT_INTERVAL, value)
     }
 
     pub fn set_rtr_solicit_delay(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[RTR_SOLICIT_DELAY], value)
+        self.safe_write(RTR_SOLICIT_DELAY, value)
     }
 
     pub fn set_use_tempaddr(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[USE_TEMPADDR], value)
+        self.safe_write(USE_TEMPADDR, value)
     }
 
     pub fn set_temp_valid_lft(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[TEMP_VALID_LFT], value)
+        self.safe_write(TEMP_VALID_LFT, value)
     }
 
     pub fn set_temp_prefered_lft(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[TEMP_PREFERED_LFT], value)
+        self.safe_write(TEMP_PREFERED_LFT, value)
     }
 
     pub fn set_regen_max_retry(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[REGEN_MAX_RETRY], value)
+        self.safe_write(REGEN_MAX_RETRY, value)
     }
 
     pub fn set_max_desync_factor(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[MAX_DESYNC_FACTOR], value)
+        self.safe_write(MAX_DESYNC_FACTOR, value)
     }
 
     pub fn set_max_addresses(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[MAX_ADDRESSES], value)
+        self.safe_write(MAX_ADDRESSES, value)
     }
 
     pub fn set_force_mld_version(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[FORCE_MLD_VERSION], value)
+        self.safe_write(FORCE_MLD_VERSION, value)
     }
 
     pub fn set_accept_ra_defrtr(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[ACCEPT_RA_DEFRTR], value)
+        self.safe_write(ACCEPT_RA_DEFRTR, value)
     }
 
     pub fn set_accept_ra_pinfo(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[ACCEPT_RA_PINFO], value)
+        self.safe_write(ACCEPT_RA_PINFO, value)
     }
 
     pub fn set_accept_ra_rtr_pref(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[ACCEPT_RA_RTR_PREF], value)
+        self.safe_write(ACCEPT_RA_RTR_PREF, value)
     }
 
     pub fn set_rtr_probe_interval(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[RTR_PROBE_INTERVAL], value)
+        self.safe_write(RTR_PROBE_INTERVAL, value)
     }
 
     pub fn set_accept_ra_rt_info_max_plen(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[ACCEPT_RA_RT_INFO_MAX_PLEN], value)
+        self.safe_write(ACCEPT_RA_RT_INFO_MAX_PLEN, value)
     }
 
     pub fn set_proxy_ndp(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[PROXY_NDP], value)
+        self.safe_write(PROXY_NDP, value)
     }
 
     pub fn set_optimistic_dad(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[OPTIMISTIC_DAD], value)
+        self.safe_write(OPTIMISTIC_DAD, value)
     }
 
     pub fn set_accept_source_route(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[ACCEPT_SOURCE_ROUTE], value)
+        self.safe_write(ACCEPT_SOURCE_ROUTE, value)
     }
 
     pub fn set_mc_forwarding(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[MC_FORWARDING], value)
+        self.safe_write(MC_FORWARDING, value)
     }
 
     pub fn set_disable_ipv6(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[DISABLE_IPV6], value)
+        self.safe_write(DISABLE_IPV6, value)
     }
 
     pub fn set_accept_dad(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[ACCEPT_DAD], value)
+        self.safe_write(ACCEPT_DAD, value)
     }
 
     pub fn set_force_tllao(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[FORCE_TLLAO], value)
+        self.safe_write(FORCE_TLLAO, value)
     }
 
     pub fn set_ndisc_notify(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[NDISC_NOTIFY], value)
+        self.safe_write(NDISC_NOTIFY, value)
     }
 
     pub fn set_mldv1_unsolicited_report_interval(&mut self, value: i32) {
-        NativeEndian::write_i32(
-            &mut self.buffer.as_mut()[MLDV1_UNSOLICITED_REPORT_INTERVAL],
+        self.safe_write(
+           MLDV1_UNSOLICITED_REPORT_INTERVAL,
             value,
         )
     }
 
     pub fn set_mldv2_unsolicited_report_interval(&mut self, value: i32) {
-        NativeEndian::write_i32(
-            &mut self.buffer.as_mut()[MLDV2_UNSOLICITED_REPORT_INTERVAL],
+        self.safe_write(
+           MLDV2_UNSOLICITED_REPORT_INTERVAL,
             value,
         )
     }
 
     pub fn set_suppress_frag_ndisc(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[SUPPRESS_FRAG_NDISC], value)
+        self.safe_write(SUPPRESS_FRAG_NDISC, value)
     }
 
     pub fn set_accept_ra_from_local(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[ACCEPT_RA_FROM_LOCAL], value)
+        self.safe_write(ACCEPT_RA_FROM_LOCAL, value)
     }
 
     pub fn set_use_optimistic(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[USE_OPTIMISTIC], value)
+        self.safe_write(USE_OPTIMISTIC, value)
     }
 
     pub fn set_accept_ra_mtu(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[ACCEPT_RA_MTU], value)
+        self.safe_write(ACCEPT_RA_MTU, value)
     }
 
     pub fn set_stable_secret(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[STABLE_SECRET], value)
+        self.safe_write(STABLE_SECRET, value)
     }
 
     pub fn set_use_oif_addrs_only(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[USE_OIF_ADDRS_ONLY], value)
+        self.safe_write(USE_OIF_ADDRS_ONLY, value)
     }
 
     pub fn set_accept_ra_min_hop_limit(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[ACCEPT_RA_MIN_HOP_LIMIT], value)
+        self.safe_write(ACCEPT_RA_MIN_HOP_LIMIT, value)
     }
 
     pub fn set_ignore_routes_with_linkdown(&mut self, value: i32) {
-        NativeEndian::write_i32(
-            &mut self.buffer.as_mut()[IGNORE_ROUTES_WITH_LINKDOWN],
+        self.safe_write(
+           IGNORE_ROUTES_WITH_LINKDOWN,
             value,
         )
     }
 
     pub fn set_drop_unicast_in_l2_multicast(&mut self, value: i32) {
-        NativeEndian::write_i32(
-            &mut self.buffer.as_mut()[DROP_UNICAST_IN_L2_MULTICAST],
+        self.safe_write(
+           DROP_UNICAST_IN_L2_MULTICAST,
             value,
         )
     }
 
     pub fn set_drop_unsolicited_na(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[DROP_UNSOLICITED_NA], value)
+        self.safe_write(DROP_UNSOLICITED_NA, value)
     }
 
     pub fn set_keep_addr_on_down(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[KEEP_ADDR_ON_DOWN], value)
+        self.safe_write(KEEP_ADDR_ON_DOWN, value)
     }
 
     pub fn set_rtr_solicit_max_interval(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[RTR_SOLICIT_MAX_INTERVAL], value)
+        self.safe_write(RTR_SOLICIT_MAX_INTERVAL, value)
     }
 
     pub fn set_seg6_enabled(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[SEG6_ENABLED], value)
+        self.safe_write(SEG6_ENABLED, value)
     }
 
     pub fn set_seg6_require_hmac(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[SEG6_REQUIRE_HMAC], value)
+        self.safe_write(SEG6_REQUIRE_HMAC, value)
     }
 
     pub fn set_enhanced_dad(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[ENHANCED_DAD], value)
+        self.safe_write(ENHANCED_DAD, value)
     }
 
     pub fn set_addr_gen_mode(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[ADDR_GEN_MODE], value)
+        self.safe_write(ADDR_GEN_MODE, value)
     }
 
     pub fn set_disable_policy(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[DISABLE_POLICY], value)
+        self.safe_write(DISABLE_POLICY, value)
     }
 
     pub fn set_accept_ra_rt_info_min_plen(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[ACCEPT_RA_RT_INFO_MIN_PLEN], value)
+        self.safe_write(ACCEPT_RA_RT_INFO_MIN_PLEN, value)
     }
 
     pub fn set_ndisc_tclass(&mut self, value: i32) {
-        NativeEndian::write_i32(&mut self.buffer.as_mut()[NDISC_TCLASS], value)
+        self.safe_write(NDISC_TCLASS, value)
     }
 }
 
@@ -565,7 +583,7 @@ impl<T: AsRef<[u8]>> Parseable<LinkInet6DevConf> for LinkInet6DevConfBuffer<T> {
 
 impl Emitable for LinkInet6DevConf {
     fn buffer_len(&self) -> usize {
-        LINK_INET6_DEV_CONF_LEN
+        LINK_INET6_DEV_CONF_MAX_LEN
     }
 
     fn emit(&self, buffer: &mut [u8]) {
