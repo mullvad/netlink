@@ -2,8 +2,8 @@ use crate::constants::*;
 use failure::ResultExt;
 
 use crate::{
-    AckMessage, DecodeError, Emitable, ErrorBuffer, ErrorMessage, NetlinkBuffer, NetlinkHeader,
-    Parseable, ParseableParametrized,
+    traits::ParseableParametrized, AckMessage, DecodeError, Emitable, ErrorBuffer, ErrorMessage,
+    NetlinkBuffer, NetlinkHeader, Parseable,
 };
 
 #[cfg(feature = "rtnetlink")]
