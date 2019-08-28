@@ -97,7 +97,7 @@ pub enum LinkNla {
     OperState(LinkState),
     Stats(Vec<u8>),
     Stats64(Vec<u8>),
-    Map(LinkMap),
+    Map(Vec<u8>),
     // AF_SPEC (the type of af_spec depends on the interface family of the message)
     AfSpecInet(Vec<LinkAfSpecInetNla>),
     // AfSpecBridge(Vec<LinkAfSpecBridgeNla>),
@@ -135,6 +135,7 @@ impl Nla for LinkNla {
                 | Broadcast(ref bytes)
                 | AfSpecUnknown(ref bytes)
                 | AfSpecBridge(ref bytes)
+                | Map(ref bytes)
                 => bytes.len(),
 
             // strings: +1 because we need to append a nul byte
@@ -170,7 +171,6 @@ impl Nla for LinkNla {
 
             // Defaults
             OperState(_) => size_of::<u8>(),
-            Map(_) => LINK_MAP_LEN,
             Stats(_) => LINK_STATS_LEN,
             Stats64(_) => LINK_STATS64_LEN,
             LinkInfo(ref nlas) => nlas.as_slice().buffer_len(),
@@ -212,6 +212,7 @@ impl Nla for LinkNla {
                 | AfSpecBridge(ref bytes)
                 | Stats(ref bytes)
                 | Stats64(ref bytes)
+                | Map(ref bytes)
                 => buffer.copy_from_slice(bytes.as_slice()),
 
             // String
@@ -252,7 +253,6 @@ impl Nla for LinkNla {
                 => NativeEndian::write_i32(buffer, *value),
 
             OperState(state) => buffer[0] = state.into(),
-            Map(ref map) => map.emit(buffer),
             LinkInfo(ref nlas) => nlas.as_slice().emit(buffer),
             AfSpecInet(ref nlas) => nlas.as_slice().emit(buffer),
             // AfSpecBridge(ref nlas) => nlas.as_slice().emit(buffer),
@@ -413,10 +413,7 @@ impl<'buffer, T: AsRef<[u8]> + ?Sized> ParseableParametrized<LinkNla, u16>
                     .context("invalid IFLA_OPERSTATE value")?
                     .into(),
             ),
-            IFLA_MAP => Map(LinkMapBuffer::new_checked(payload)
-                .context("invalid IFLA_MAP value")?
-                .parse()
-                .context("invalid IFLA_MAP value")?),
+            IFLA_MAP => Map(payload.to_vec()),
             IFLA_STATS => Stats(payload.to_vec()),
             IFLA_STATS64 => Stats64(payload.to_vec()),
             IFLA_AF_SPEC => match interface_family as u16 {
