@@ -7,7 +7,7 @@ use byteorder::{ByteOrder, NativeEndian};
 use failure::ResultExt;
 
 use crate::utils::{parse_string, parse_u32};
-use crate::{DecodeError, DefaultNla, Emitable, Nla, NlaBuffer, Parseable};
+use crate::{DecodeError, DefaultNla, Nla, NlaBuffer, Parseable};
 
 use crate::constants::*;
 
@@ -19,7 +19,7 @@ pub enum AddressNla {
     Label(String),
     Broadcast(Vec<u8>),
     Anycast(Vec<u8>),
-    CacheInfo(AddressCacheInfo),
+    CacheInfo(Vec<u8>),
     Multicast(Vec<u8>),
     Flags(u32),
     Other(DefaultNla),
@@ -45,7 +45,7 @@ impl Nla for AddressNla {
             Flags(_) => size_of::<u32>(),
 
             // Native
-            CacheInfo(_) => ADDRESSS_CACHE_INFO_LEN,
+            CacheInfo(ref buffer) => buffer.len(),
 
             // Defaults
             Other(ref attr)  => attr.value_len(),
@@ -62,6 +62,7 @@ impl Nla for AddressNla {
                 | Local(ref bytes)
                 | Broadcast(ref bytes)
                 | Anycast(ref bytes)
+                | CacheInfo(ref bytes)
                 | Multicast(ref bytes) => buffer.copy_from_slice(bytes.as_slice()),
 
             // String
@@ -73,7 +74,6 @@ impl Nla for AddressNla {
             // u32
             Flags(ref value) => NativeEndian::write_u32(buffer, *value),
 
-            CacheInfo(ref cacheinfo) => cacheinfo.emit(buffer),
 
             // Default
             Other(ref attr) => attr.emit_value(buffer),
@@ -108,12 +108,7 @@ impl<'buffer, T: AsRef<[u8]> + ?Sized> Parseable<AddressNla> for NlaBuffer<&'buf
             IFA_LABEL => Label(parse_string(payload).context("invalid IFA_LABEL value")?),
             IFA_BROADCAST => Broadcast(payload.to_vec()),
             IFA_ANYCAST => Anycast(payload.to_vec()),
-            IFA_CACHEINFO => CacheInfo(
-                AddressCacheInfoBuffer::new_checked(payload)
-                    .context("invalid IFA_CACHEINFO value")?
-                    .parse()
-                    .context("invalid IFA_CACHEINFO value")?,
-            ),
+            IFA_CACHEINFO => CacheInfo(payload.to_vec()),
             IFA_MULTICAST => Multicast(payload.to_vec()),
             IFA_FLAGS => Flags(parse_u32(payload).context("invalid IFA_FLAGS value")?),
             kind => Other(
