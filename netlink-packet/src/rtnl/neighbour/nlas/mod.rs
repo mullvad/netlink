@@ -8,14 +8,14 @@ use failure::ResultExt;
 
 use crate::constants::*;
 use crate::utils::{parse_u16, parse_u32};
-use crate::{DecodeError, DefaultNla, Emitable, Nla, NlaBuffer, Parseable};
+use crate::{DecodeError, DefaultNla, Nla, NlaBuffer, Parseable};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum NeighbourNla {
     Unspec(Vec<u8>),
     Destination(Vec<u8>),
     LinkLocalAddress(Vec<u8>),
-    CacheInfo(NeighbourCacheInfo),
+    CacheInfo(Vec<u8>),
     Probes(Vec<u8>),
     Vlan(u16),
     Port(Vec<u8>),
@@ -38,8 +38,8 @@ impl Nla for NeighbourNla {
             | Probes(ref bytes)
             | Port(ref bytes)
             | Master(ref bytes)
+            | CacheInfo(ref bytes)
             | LinkNetNsId(ref bytes) => bytes.len(),
-            CacheInfo(_) => NEIGHBOUR_CACHE_INFO_LEN,
             Vlan(_) => size_of::<u16>(),
             Vni(_)
             | IfIndex(_)
@@ -58,8 +58,8 @@ impl Nla for NeighbourNla {
             | Probes(ref bytes)
             | Port(ref bytes)
             | Master(ref bytes)
+            | CacheInfo(ref bytes)
             | LinkNetNsId(ref bytes) => buffer.copy_from_slice(bytes.as_slice()),
-            CacheInfo(ref cacheinfo) => cacheinfo.emit(buffer),
             Vlan(ref value) => NativeEndian::write_u16(buffer, *value),
             Vni(ref value)
             | IfIndex(ref value)
@@ -96,11 +96,7 @@ impl<'buffer, T: AsRef<[u8]> + ?Sized> Parseable<NeighbourNla> for NlaBuffer<&'b
             NDA_UNSPEC => Unspec(payload.to_vec()),
             NDA_DST => Destination(payload.to_vec()),
             NDA_LLADDR => LinkLocalAddress(payload.to_vec()),
-            NDA_CACHEINFO => CacheInfo(
-                NeighbourCacheInfoBuffer::new(payload)
-                    .parse()
-                    .context("invalid NDA_CACHEINFO value")?,
-            ),
+            NDA_CACHEINFO => CacheInfo(payload.to_vec()),
             NDA_PROBES => Probes(payload.to_vec()),
             NDA_VLAN => Vlan(parse_u16(payload)?),
             NDA_PORT => Port(payload.to_vec()),
